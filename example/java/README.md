@@ -8,7 +8,7 @@
 
 ```powershell
 pwsh -File .\scripts\package-java-demo.ps1
-java -jar .\dist\instrument-demo-0.1.0.jar
+pwsh -File .\dist\java-demo\start.ps1
 ```
 
 也可以在 Demo 模块内直接构建：
@@ -157,7 +157,7 @@ Reporting Lease 只用于请求代次隔离，不是身份凭据，也不会持�
 
 - Demo 端口：`server.port=18622`
 - 产品地址：`debugger.server-url=http://127.0.0.1:18621`
-- 业务上报凭据：Demo 默认使用 `codex-demo-business`；产品 `application.yml` 中的 `breakhub.security.business-client-token` 必须显式配置为相同值。如果通过 `BREAKHUB_BUSINESS_CLIENT_TOKEN` 覆盖 Demo，产品配置也必须同步修改；不要把本地忽略的配置文件当作仓库默认事实来源
+- 业务上报凭据：Demo 默认使用 `breakhub-local-business-token`；产品 `application.yml` 中的 `breakhub.security.business-client-token` 必须显式配置为相同值；不要把本地忽略的配置文件当作仓库默认事实来源
 - 上报连接、读取和断点等待超时沿用 `debugger.*-timeout-ms`
 
 租约失效时间固定为 30 秒，不通过业务配置改写。
@@ -301,7 +301,7 @@ Get-Content -LiteralPath $blackholeStdout -Wait
 脚本只监听 loopback：首次合法建租请求返回完整 ACK，后续续签连接会被接受并读完，但永不返回 HTTP 响应。重新启动产品并开始调试后，在另一个终端直接建立并等待一个业务 Pause：
 
 ```powershell
-$businessToken = "codex-demo-business" # 必须与产品 application.yml 一致
+$businessToken = "breakhub-local-business-token" # 必须与产品 application.yml 一致
 $interactionId = [guid]::NewGuid().ToString()
 $headers = @{ Authorization = "Bearer $businessToken" }
 $beforeBody = @{

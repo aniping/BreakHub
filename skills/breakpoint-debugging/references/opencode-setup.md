@@ -19,7 +19,7 @@ conda activate breakhub
 .\scripts\package-breakpoint-debugging.ps1
 ```
 
-The script builds the `PyInstaller -F` executable, runs the Codex skill validator when available, stages a clean standard skill directory, and writes `dist/breakpoint-debugging.zip`.
+The script builds the `PyInstaller -F` executable, runs the Codex skill validator when available, stages a clean standard skill directory, and writes `dist/breakpoint-debugging/breakpoint-debugging.zip`.
 
 ## Install or reinstall
 
@@ -34,7 +34,7 @@ The agent should run the simple installer itself and pass `-Scope Project` unles
 For a manual fallback from the repository root, run one command:
 
 ```powershell
-.\scripts\install-breakpoint-debugging.ps1
+.\dist\breakpoint-debugging\install-breakpoint-debugging.ps1
 ```
 
 The script finds the ZIP, extracts it temporarily, detects the nearest project root, installs the files, updates OpenCode configuration, verifies the MCP connection, and removes the temporary files. It asks the user to choose the current project or global OpenCode directory; pressing Enter defaults to the current project. Existing configuration values are preserved semantically; when an existing JSONC file contains comments or custom formatting, the deterministic merge normalizes them to JSON formatting.
@@ -42,13 +42,13 @@ The script finds the ZIP, extracts it temporarily, detects the nearest project r
 For an agent or another non-interactive caller, select the current project explicitly:
 
 ```powershell
-.\scripts\install-breakpoint-debugging.ps1 -Scope Project
+.\dist\breakpoint-debugging\install-breakpoint-debugging.ps1 -Scope Project
 ```
 
 Or select the global directory explicitly:
 
 ```powershell
-.\scripts\install-breakpoint-debugging.ps1 -Scope Global
+.\dist\breakpoint-debugging\install-breakpoint-debugging.ps1 -Scope Global
 ```
 
 When distributing only release artifacts, keep `install-breakpoint-debugging.ps1` beside `breakpoint-debugging.zip` and run the installer from that directory.

@@ -8,10 +8,10 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'build'))
 if (-not $PackagePath) {
-    $PackagePath = Join-Path $repoRoot 'dist\breakpoint-debugging.zip'
+    $PackagePath = Join-Path $repoRoot 'dist\breakpoint-debugging\breakpoint-debugging.zip'
 }
 if (-not $InstallerPath) {
-    $InstallerPath = Join-Path $repoRoot 'dist\install-breakpoint-debugging.ps1'
+    $InstallerPath = Join-Path $repoRoot 'dist\breakpoint-debugging\install-breakpoint-debugging.ps1'
 }
 $resolvedPackage = [IO.Path]::GetFullPath($PackagePath)
 $resolvedInstaller = [IO.Path]::GetFullPath($InstallerPath)

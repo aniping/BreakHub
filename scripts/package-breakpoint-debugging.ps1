@@ -19,7 +19,7 @@ $installerScript = Join-Path $PSScriptRoot 'install-breakpoint-debugging.ps1'
 $installerName = 'install-breakpoint-debugging.ps1'
 
 if (-not $OutputPath) {
-    $OutputPath = Join-Path $repoRoot "dist\$skillName.zip"
+    $OutputPath = Join-Path $repoRoot "dist\$skillName\$skillName.zip"
 }
 $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)
 

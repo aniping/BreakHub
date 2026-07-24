@@ -38,7 +38,7 @@ Copy-Item application.example.yml application.yml
 
 启动命令中的 `spring.config.location` 只负责定位配置文件，不承载产品配置值。
 
-一个产品实例只服务配置中的一台装备。`breakhub.equipment.debugger-switch.url` 必须指向业务接入端唯一入口，例如 Demo 的 `http://127.0.0.1:18622/api/demo/debugger/enabled`；本阶段该入口不鉴权，5 秒硬超时也不是部署配置项。`breakhub.security.business-client-token` 必须与 Demo 的 `debugger.business-client-token` 显式配置为相同值，仓库中 Demo 的默认值是 `codex-demo-business`。Reporting Lease ID 只保存在产品协调器内存中，不进入公开 API、Web、MCP、Agent、配置或日志。
+一个产品实例只服务配置中的一台装备。`breakhub.equipment.debugger-switch.url` 必须指向业务接入端唯一入口，例如 Demo 的 `http://127.0.0.1:18622/api/demo/debugger/enabled`；本阶段该入口不鉴权，5 秒硬超时也不是部署配置项。`breakhub.security.business-client-token` 必须与 Demo 的 `debugger.business-client-token` 显式配置为相同值，仓库中 Demo 的默认值是 `breakhub-local-business-token`。Reporting Lease ID 只保存在产品协调器内存中，不进入公开 API、Web、MCP、Agent、配置或日志。
 
 ## 构建与启动
 
@@ -53,6 +53,12 @@ npm run build
 cd ..
 mvn clean package
 java -jar target\breakhub-0.1.0-SNAPSHOT.jar --spring.config.location=file:.\application.yml
+```
+
+仓库级发布脚本会把 Hub JAR、本机联调配置和启动脚本归类到 `dist/hub/`，可直接运行：
+
+```powershell
+pwsh -File .\dist\hub\start.ps1
 ```
 
 打开配置文件中 `server.address` 与 `server.port` 对应的地址，例如 `http://127.0.0.1:18621/`，使用 `security.web-username` 和 `security.web-password` 登录。Web 会区分“运行中 · 业务上报正常”“运行中 · 业务服务续签异常”和“空闲 · 业务上报租约已失效”；Demo 已确认的业务上报通道异常也会单独显示。任何状态都不会显示租约 ID。

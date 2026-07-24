@@ -1,0 +1,31 @@
+# Local integration configuration. Replace every security value before non-local use.
+server:
+  address: 127.0.0.1
+  port: 18621
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+
+breakhub:
+  data-directory: ./data
+
+  equipment:
+    id: equipment-01
+    display-name: 一号装备
+    debugger-switch:
+      url: http://127.0.0.1:18622/api/demo/debugger/enabled
+
+  security:
+    web-username: admin
+    web-password: breakhub-local-admin
+    gateway-token: breakhub-local-gateway-token
+    business-client-token: breakhub-local-business-token
+
+  control-lease:
+    timeout: 30m
+
+  interaction:
+    pause-timeout: 25m
+    max-payload-size: 16MB
