@@ -44,14 +44,21 @@ $skillDirectory = Join-Path $resolvedDist 'breakpoint-debugging'
 $hubJar = Get-SingleFile -Directory $hubDirectory -Filter 'breakhub*.jar'
 $probeJar = Get-SingleFile -Directory $probeDirectory -Filter 'bp-probe*.jar'
 $skillZip = Get-SingleFile -Directory $skillDirectory -Filter 'breakpoint-debugging.zip'
-$installer = Get-SingleFile -Directory $skillDirectory -Filter 'install-breakpoint-debugging.ps1'
+$manager = Get-SingleFile -Directory $skillDirectory -Filter 'breakpoint-debugging-manager.exe'
 $hubConfig = Join-Path $hubDirectory 'application.yml'
 $hubStart = Join-Path $hubDirectory 'start.ps1'
 $probeReadme = Join-Path $probeDirectory 'README.md'
-foreach ($requiredFile in @($hubConfig, $hubStart, $probeReadme)) {
+$skillReadme = Join-Path $skillDirectory 'README.md'
+foreach ($requiredFile in @($hubConfig, $hubStart, $probeReadme, $skillReadme)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "Required release file is missing: $requiredFile"
     }
+}
+$unexpectedSkillScripts = @(
+    Get-ChildItem -LiteralPath $skillDirectory -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+)
+if ($unexpectedSkillScripts.Count -ne 0) {
+    throw "Breakpoint Debugging release must not contain PowerShell installers: $($unexpectedSkillScripts.Name -join ', ')"
 }
 
 $probeReadmeText = Get-Content -LiteralPath $probeReadme -Raw
@@ -76,11 +83,14 @@ if ($configText -notmatch '(?m)^\s*address:\s*127\.0\.0\.1\s*$' -or
 }
 
 Test-PowerShellSyntax -Path $hubStart
-Test-PowerShellSyntax -Path $installer.FullName
+if ($manager.Length -eq 0) {
+    throw 'Breakpoint Debugging manager executable is empty.'
+}
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::OpenRead($skillZip.FullName)
 try {
+    $entryNames = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
     $topLevels = @(
         $archive.Entries |
             ForEach-Object { ($_.FullName -split '[\\/]')[0] } |
@@ -93,6 +103,11 @@ finally {
 }
 if ($topLevels.Count -ne 1 -or $topLevels[0] -ne 'breakpoint-debugging') {
     throw "Unexpected Skill ZIP top-level entries: $($topLevels -join ', ')"
+}
+foreach ($forbiddenScript in @('install.ps1', 'uninstall.ps1', 'manage-targets.ps1')) {
+    if ($entryNames -contains "breakpoint-debugging/scripts/$forbiddenScript") {
+        throw "Skill ZIP must not contain lifecycle/configuration script: $forbiddenScript"
+    }
 }
 
 $rootFiles = @(Get-ChildItem -LiteralPath $resolvedDist -File)

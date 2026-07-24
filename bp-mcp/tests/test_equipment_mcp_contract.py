@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from bp_mcp.context import GatewayRequestContext, use_gateway_context
+from bp_mcp.target_registry import TargetRegistry, TargetRegistryError
 from bp_mcp.tool_server import mcp_server
 
 
@@ -61,6 +62,15 @@ def product_server():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if not self.authorized():
+                return
+            if self.path == "/api/v1/equipment":
+                self.send_json(
+                    200,
+                    {
+                        "equipment_id": state.equipment_id,
+                        "display_name": state.display_name,
+                    },
+                )
                 return
             if self.path == "/api/v1/overview":
                 self.send_json(200, state.overview(self.headers.get("X-MBP-Control-Instance", "")))
@@ -157,28 +167,15 @@ def gateway_config(tmp_path, monkeypatch, product_server):
     registry_path.write_text(
         json.dumps(
             {
-                "version": 1,
-                "targets": [
+                "version": 2,
+                "connections": [
                     {
-                        "equipment_id": "equipment-01",
-                        "display_name": "一号装备",
-                        "description": "产线电源装备",
-                        "breakpoint_url": product_url,
-                        "gateway_token": "gateway-secret",
+                        "url": product_url,
+                        "access_token": "gateway-secret",
                     },
                     {
-                        "equipment_id": "equipment-offline",
-                        "display_name": "离线装备",
-                        "description": "用于不可达验证",
-                        "breakpoint_url": "http://127.0.0.1:1",
-                        "gateway_token": "offline-secret",
-                    },
-                    {
-                        "equipment_id": "equipment-for-other-user",
-                        "display_name": "未授权装备",
-                        "breakpoint_url": product_url,
-                        "gateway_token": "unauthorized-secret",
-                        "allowed_users": ["other-user"],
+                        "url": product_url + "/offline",
+                        "access_token": "offline-secret",
                     },
                 ],
             },
@@ -226,33 +223,44 @@ def test_equipment_input_schemas_remain_exact_after_later_tool_slices():
         )
 
 
+def test_registry_rejects_equivalent_url_spellings_before_refresh():
+    with pytest.raises(TargetRegistryError, match="duplicate BreakHub URL"):
+        TargetRegistry.from_dict(
+            {
+                "version": 2,
+                "connections": [
+                    {
+                        "url": "HTTP://LOCALHOST:80/",
+                        "access_token": "first",
+                    },
+                    {
+                        "url": "http://localhost",
+                        "access_token": "second",
+                    },
+                ],
+            }
+        )
+
+
 def test_list_equipment_returns_safe_authorized_summaries(gateway_config):
     result = call_tool("list_equipment", {})
 
     assert result["ok"] is True
-    assert [item["equipment_id"] for item in result["equipment"]] == [
-        "equipment-01",
-        "equipment-offline",
-    ]
+    assert [item["equipment_id"] for item in result["equipment"]] == ["equipment-01"]
+    assert result["refresh"] == {"unreachable_connections": 1}
     assert result["equipment"][0]["current_session"]["session_id"] == "session-current"
     assert result["equipment"][0]["debugging"]["status"] == "idle"
     assert result["equipment"][0]["control"]["controller"] == "none"
-    assert result["equipment"][1]["connection"] == {
-        "connected": False,
-        "status": "unreachable",
-    }
     serialized = json.dumps(result, ensure_ascii=False)
     assert "gateway-secret" not in serialized
     assert "offline-secret" not in serialized
-    assert "unauthorized-secret" not in serialized
-    assert "未授权装备" not in serialized
     assert "127.0.0.1" not in serialized
     assert "http://" not in serialized
     assert "lease_id" not in serialized
     assert "reporting-lease-must-not-leak" not in serialized
 
 
-def test_connection_state_machine_and_unreachable_target_do_not_create_bindings(gateway_config):
+def test_connection_state_machine_and_unknown_target_do_not_create_bindings(gateway_config):
     _state, bindings_path = gateway_config
 
     connected = call_tool("connect_equipment", {"equipment_id": "equipment-01"})
@@ -264,19 +272,72 @@ def test_connection_state_machine_and_unreachable_target_do_not_create_bindings(
     assert repeated["ok"] is True
     assert repeated["result"] == "already_connected"
 
-    conflict = call_tool("connect_equipment", {"equipment_id": "equipment-offline"})
+    conflict = call_tool("connect_equipment", {"equipment_id": "missing-equipment"})
     assert conflict["ok"] is False
-    assert conflict["error"]["code"] == "EQUIPMENT_ALREADY_CONNECTED"
+    assert conflict["error"]["code"] == "EQUIPMENT_NOT_FOUND"
 
     unreachable = call_tool(
         "connect_equipment",
-        {"equipment_id": "equipment-offline"},
+        {"equipment_id": "missing-equipment"},
         thread_id="thread-offline",
     )
     assert unreachable["ok"] is False
-    assert unreachable["error"]["code"] == "EQUIPMENT_UNREACHABLE"
+    assert unreachable["error"]["code"] == "EQUIPMENT_NOT_FOUND"
     bindings = json.loads(bindings_path.read_text(encoding="utf-8"))["bindings"]
     assert [item["thread_id"] for item in bindings] == ["thread-a"]
+
+
+def test_list_refreshes_equipment_identity_from_breakhub(gateway_config):
+    state, _bindings_path = gateway_config
+
+    first = call_tool("list_equipment", {})
+    assert [item["equipment_id"] for item in first["equipment"]] == ["equipment-01"]
+
+    state.equipment_id = "equipment-02"
+    state.display_name = "二号装备"
+    refreshed = call_tool("list_equipment", {})
+
+    assert [item["equipment_id"] for item in refreshed["equipment"]] == ["equipment-02"]
+    assert refreshed["equipment"][0]["name"] == "二号装备"
+    assert call_tool("connect_equipment", {"equipment_id": "equipment-01"})["ok"] is False
+    assert call_tool("connect_equipment", {"equipment_id": "equipment-02"})["ok"] is True
+
+
+def test_legacy_disabled_target_is_not_reenabled(
+    tmp_path, monkeypatch, product_server
+):
+    _state, product_url = product_server
+    registry_path = tmp_path / "legacy-equipment.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "targets": [
+                    {
+                        "equipment_id": "stale-local-id",
+                        "breakpoint_url": product_url,
+                        "gateway_token": "gateway-secret",
+                        "enabled": True,
+                    },
+                    {
+                        "equipment_id": "disabled-local-id",
+                        "breakpoint_url": "http://127.0.0.1:1",
+                        "gateway_token": "offline-secret",
+                        "enabled": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MCP_GATEWAY_TARGETS_PATH", str(registry_path))
+    monkeypatch.setenv("MCP_GATEWAY_BINDINGS_PATH", str(tmp_path / "bindings.json"))
+    monkeypatch.setenv("REQUEST_TIMEOUT_SECONDS", "1")
+
+    result = call_tool("list_equipment", {})
+
+    assert [item["equipment_id"] for item in result["equipment"]] == ["equipment-01"]
+    assert result["refresh"] == {"unreachable_connections": 0}
 
 
 def test_web_control_allows_read_only_connection_but_blocks_start(gateway_config):

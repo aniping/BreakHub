@@ -1,6 +1,6 @@
 ---
 name: breakpoint-debugging
-description: Install, reinstall, or repair the Breakpoint Debugging Skill and its BreakHub local stdio MCP integration; discover instrument interfaces, capture call records, manage before/after breakpoints, inspect paused interactions, inject parameter or result changes, continue calls safely, and manage the OpenCode equipment target registry. Use for OpenCode 安装或重装、MCP 连接修复、断点调试、调用记录捕捉、参数注入、返回值修改、设备连接、接口发现、暂停调用排查，以及新增、修改或删除 BreakHub 设备配置。
+description: Use the BreakHub local stdio MCP to discover equipment interfaces, capture call records, manage before/after breakpoints, inspect paused interactions, inject parameter or result changes, and continue calls safely. Use for 断点调试、调用记录捕捉、参数注入、返回值修改、设备连接、接口发现和暂停调用排查。
 ---
 
 # Breakpoint Debugging
@@ -8,12 +8,6 @@ description: Install, reinstall, or repair the Breakpoint Debugging Skill and it
 Use the BreakHub MCP tools as the source of truth for breakpoint state. Do not call the product HTTP API or edit its state files when the MCP tools are available.
 
 OpenCode prefixes each MCP tool with its configured server name. With the recommended server key `microbreakpoint`, call tools such as `microbreakpoint_list_equipment`; throughout this skill, the unprefixed suffix is the authoritative tool name.
-
-## Install or repair OpenCode integration
-
-When the user asks to install, reinstall, or repair this integration, read [references/opencode-setup.md](references/opencode-setup.md). Default to the current-project scope unless the user explicitly requests the global OpenCode directory. Run the simple installer yourself with an explicit scope; do not ask the user to copy extraction, installation, or configuration commands. The installer must install the files, merge the MCP and permission entries without replacing unrelated settings, and verify `microbreakpoint connected`. Finish only after that verification succeeds, or report the exact remaining blocker. Ask the user only for product-specific values such as a missing gateway token; never print those values back.
-
-When the user asks to uninstall, read the uninstall section in the same reference and run `scripts/uninstall.ps1` with an explicit scope. The script removes the installed Skill and its OpenCode MCP/permission entries. Keep target and binding data unless the user explicitly asks to delete it.
 
 ## Run the workflow
 
@@ -28,11 +22,11 @@ When the user asks to uninstall, read the uninstall section in the same referenc
 9. Continue only the reviewed pause with `continue_interaction(interaction_id, pause_point)`. Re-read the record if the stage may have changed.
 10. Call `disconnect_equipment` when the task is complete. It releases debugging only when this MCP identity owns control.
 
-Read [references/tool-reference.md](references/tool-reference.md) when exact arguments, condition syntax, paging, or error handling are needed. If the tools are absent in OpenCode, read [references/opencode-setup.md](references/opencode-setup.md).
+Read [references/tool-reference.md](references/tool-reference.md) when exact arguments, condition syntax, paging, or error handling are needed. If the tools are absent in OpenCode, report that the integration is unavailable and direct the user to the release copy of `breakpoint-debugging-manager.exe`; lifecycle management is intentionally outside this Skill.
 
 ## Manage equipment targets
 
-When the user asks to list, add, update, disable, or remove equipment configuration, use `scripts/manage-targets.ps1` instead of editing `breakhub_targets.json` freehand. Select the installed Project or Global scope and read [references/opencode-setup.md](references/opencode-setup.md) for exact commands and paths. Never print or repeat target URLs or `gateway_token`; the List action intentionally omits both. Preserve the existing URL and token on updates unless the user explicitly supplies replacements. Obtain explicit confirmation immediately before Remove, then invoke it with `-Confirm:$false`. Re-run `list_equipment` after a successful write to verify that the MCP sees the new registry state.
+Connection configuration belongs to the external `breakpoint-debugging-manager.exe`, not MCP tool arguments and not files embedded in this Skill. When the user asks to list, add, update, or remove a connection, direct them to its `targets` command. Do not ask the user to paste an access token into the conversation and do not edit `breakhub_targets.json` freehand. The user only supplies a BreakHub URL and access token; device ID and display information are refreshed from BreakHub. After a successful change, call `list_equipment` to verify that MCP sees the authoritative identity.
 
 ## Apply safety rules
 

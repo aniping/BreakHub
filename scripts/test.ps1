@@ -37,7 +37,16 @@ finally {
     Pop-Location
 }
 
+Push-Location (Join-Path $repoRoot 'scripts\breakpoint-debugging-manager')
+try {
+    & $Python -m unittest test_manager.py -v
+    if ($LASTEXITCODE -ne 0) { throw 'Breakpoint Debugging manager tests failed.' }
+}
+finally {
+    Pop-Location
+}
+
 & (Join-Path $repoRoot 'scripts\package-breakpoint-debugging.ps1') -Python $Python
 if ($LASTEXITCODE -ne 0) { throw 'Skill packaging failed.' }
-& (Join-Path $repoRoot 'scripts\test-breakpoint-debugging-install.ps1')
+& (Join-Path $repoRoot 'scripts\test-breakpoint-debugging-install.ps1') -Python $Python
 if ($LASTEXITCODE -ne 0) { throw 'Skill install/uninstall tests failed.' }

@@ -29,6 +29,7 @@ function Clear-ReleaseArtifacts {
         'install-bp-skill.ps1',
         'breakpoint-debugging.zip',
         'install-breakpoint-debugging.ps1',
+        'breakpoint-debugging-manager.exe',
         'instrument-demo*.jar'
     ) |
         ForEach-Object {
@@ -39,7 +40,7 @@ function Clear-ReleaseArtifacts {
     @(
         [PSCustomObject]@{ Directory = $hubOutput; Patterns = @('breakhub*.jar', 'application.yml', 'start.ps1') },
         [PSCustomObject]@{ Directory = $probeOutput; Patterns = @('bp-probe*.jar', 'README.md') },
-        [PSCustomObject]@{ Directory = $skillOutput; Patterns = @('*.zip', 'install-*.ps1') }
+        [PSCustomObject]@{ Directory = $skillOutput; Patterns = @('*.zip', '*.exe', '*.ps1', 'README.md') }
     ) | ForEach-Object {
         $resolvedDirectory = [IO.Path]::GetFullPath($_.Directory)
         if (-not $resolvedDirectory.StartsWith($outputPrefix, [StringComparison]::OrdinalIgnoreCase)) {

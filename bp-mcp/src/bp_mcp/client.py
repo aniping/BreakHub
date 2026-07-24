@@ -92,6 +92,10 @@ class BreakHubClient:
         """Return the authoritative equipment and Current Session summary."""
         return self.request("GET", "/api/v1/overview")
 
+    def equipment(self) -> dict[str, Any]:
+        """Return the authoritative equipment identity."""
+        return self.request("GET", "/api/v1/equipment")
+
     def start_debugging(self) -> dict[str, Any]:
         """Start debugging through the product control boundary."""
         return self.request("POST", "/api/v1/debugging/start")

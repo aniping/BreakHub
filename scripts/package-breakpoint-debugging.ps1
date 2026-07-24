@@ -2,7 +2,8 @@
 param(
     [string]$Python = 'python',
     [string]$OutputPath = '',
-    [switch]$SkipMcpBuild
+    [switch]$SkipMcpBuild,
+    [switch]$SkipManagerBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,8 +16,9 @@ $stageRoot = Join-Path $buildRoot 'breakpoint-debugging-package'
 $stagedSkill = Join-Path $stageRoot $skillName
 $mcpBuildOutput = Join-Path $runtimeSource 'dist\breakhub-mcp.exe'
 $buildScript = Join-Path $runtimeSource 'scripts\build-exe.ps1'
-$installerScript = Join-Path $PSScriptRoot 'install-breakpoint-debugging.ps1'
-$installerName = 'install-breakpoint-debugging.ps1'
+$managerBuildScript = Join-Path $PSScriptRoot 'breakpoint-debugging-manager\build.ps1'
+$managerBuildOutput = Join-Path $buildRoot 'breakpoint-debugging-manager\dist\breakpoint-debugging-manager.exe'
+$manualSource = Join-Path $PSScriptRoot 'release\breakpoint-debugging\README.md'
 
 if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot "dist\$skillName\$skillName.zip"
@@ -31,6 +33,16 @@ if (-not $SkipMcpBuild) {
 }
 elseif (-not (Test-Path -LiteralPath $mcpBuildOutput -PathType Leaf)) {
     throw "MCP executable does not exist: $mcpBuildOutput"
+}
+
+if (-not $SkipManagerBuild) {
+    & $managerBuildScript -Python $Python
+    if ($LASTEXITCODE -ne 0) {
+        throw "Manager executable build failed with exit code $LASTEXITCODE."
+    }
+}
+elseif (-not (Test-Path -LiteralPath $managerBuildOutput -PathType Leaf)) {
+    throw "Manager executable does not exist: $managerBuildOutput"
 }
 
 $resolvedBuildRoot = [IO.Path]::GetFullPath($buildRoot)
@@ -73,13 +85,18 @@ else {
 
 $outputDirectory = Split-Path -Parent $resolvedOutput
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+$legacyInstaller = Join-Path $outputDirectory 'install-breakpoint-debugging.ps1'
+if (Test-Path -LiteralPath $legacyInstaller -PathType Leaf) {
+    Remove-Item -LiteralPath $legacyInstaller -Force
+}
 if (Test-Path -LiteralPath $resolvedOutput) {
     Remove-Item -LiteralPath $resolvedOutput -Force
 }
 Compress-Archive -LiteralPath $stagedSkill -DestinationPath $resolvedOutput -CompressionLevel Optimal
 Copy-Item `
-    -LiteralPath $installerScript `
-    -Destination (Join-Path $outputDirectory $installerName) `
+    -LiteralPath $managerBuildOutput `
+    -Destination (Join-Path $outputDirectory 'breakpoint-debugging-manager.exe') `
     -Force
+Copy-Item -LiteralPath $manualSource -Destination $outputDirectory -Force
 Write-Host "Packaged $resolvedOutput"
-Write-Host "Simple installer: $(Join-Path $outputDirectory $installerName)"
+Write-Host "Manager: $(Join-Path $outputDirectory 'breakpoint-debugging-manager.exe')"

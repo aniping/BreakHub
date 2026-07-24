@@ -11,7 +11,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 | `bp-mcp/` | 独立 Python MCP 项目，构建 `breakhub-mcp.exe` |
 | `skills/breakpoint-debugging/` | Breakpoint Debugging Skill 源目录，发布时注入 MCP EXE |
 | `example/java/` | Java 集成示例，仅用于验证，不作为发布产物 |
-| `scripts/` | 仓库级构建、测试、打包和 Skill 安装入口 |
+| `scripts/` | 仓库级构建、测试、打包和管理器源码 |
 
 仓库根目录没有 `pom.xml`，各语言项目独立管理依赖和生命周期。OpenCode 的 MCP 服务键继续使用 `microbreakpoint`，因此已公开的工具前缀保持为 `microbreakpoint_*`。
 
@@ -39,7 +39,7 @@ pwsh -File .\scripts\package.ps1 -Python 'python'
 pwsh -File .\scripts\package-java-demo.ps1
 ```
 
-`package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Skill ZIP 内含 `breakhub-mcp.exe`。
+`package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录包含 Skill ZIP、独立管理 EXE 和用户手册，Skill ZIP 内含 `breakhub-mcp.exe`。
 
 `package-java-demo.ps1` 独立编译 Probe、测试 Java Demo，并生成测试辅助目录 `dist/java-demo/`；该 Demo 不属于正式发布物。
 
@@ -62,16 +62,10 @@ Hub 使用 [scripts/release/hub/application.yml](scripts/release/hub/application
 
 ## 安装 Skill
 
-优先让 Agent 执行安装。`dist/breakpoint-debugging/` 已把 Skill ZIP 和安装器放在一起；告诉 OpenCode：
-
-```text
-安装这个用于 BreakHub 的 Breakpoint Debugging Skill 到当前项目，并验证 MCP 连接。
-```
-
-手工兜底只需一条命令，默认安装到当前项目；也可以显式传 `-Scope Global`：
+`dist/breakpoint-debugging/` 已把 Skill ZIP 和独立管理器放在一起。管理器不依赖 PowerShell 7、新版 .NET 或用户本机 Python，可双击运行，也可以显式执行：
 
 ```powershell
-pwsh -File .\dist\breakpoint-debugging\install-breakpoint-debugging.ps1
+.\dist\breakpoint-debugging\breakpoint-debugging-manager.exe install --scope project --project-root .
 ```
 
-详细产品配置见 [bp-hub/README.md](bp-hub/README.md)，Agent 工作流与卸载说明见 [skills/breakpoint-debugging/references/opencode-setup.md](skills/breakpoint-debugging/references/opencode-setup.md)。
+运行期连接也由同一个 EXE 管理。本地只保存 BreakHub URL 与访问 Token，MCP 会从 Hub 实时刷新设备 ID 和展示名，避免双份身份数据不一致。安装、配置、卸载和占用处理见 [scripts/release/breakpoint-debugging/README.md](scripts/release/breakpoint-debugging/README.md)；产品配置见 [bp-hub/README.md](bp-hub/README.md)。

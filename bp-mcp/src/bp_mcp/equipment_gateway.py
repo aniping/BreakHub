@@ -28,9 +28,13 @@ def list_equipment() -> dict[str, Any]:
                 connected=binding is not None and binding.target_id == target.target_id,
                 context=context,
             )
-            for target in registry.list_allowed(context.user_id, context.roles)
+            for target in registry.list_targets()
         ]
-        return {"ok": True, "equipment": items}
+        return {
+            "ok": True,
+            "equipment": items,
+            "refresh": {"unreachable_connections": registry.unreachable_count},
+        }
     except (BindingStoreError, TargetRegistryError) as error:
         return gateway_error("GATEWAY_CONFIGURATION_ERROR", str(error))
 
@@ -41,14 +45,10 @@ def connect_equipment(equipment_id: str) -> dict[str, Any]:
         settings, context, registry, store = runtime()
         if not context.thread_id:
             return gateway_error("MCP_CONTEXT_REQUIRED", "当前 MCP 请求缺少可信会话上下文")
-        target = registry.resolve(equipment_id, user_id=context.user_id, roles=context.roles)
+        target = registry.resolve(equipment_id)
         binding = store.find_binding(context.thread_id, user_id=context.user_id)
         if binding is not None and binding.target_id != target.target_id:
-            bound_target = registry.resolve(
-                binding.target_id,
-                user_id=context.user_id,
-                roles=context.roles,
-            )
+            bound_target = registry.resolve(binding.target_id)
             connected_summary = equipment_summary(
                 bound_target,
                 settings,
@@ -120,7 +120,7 @@ def disconnect_equipment() -> dict[str, Any]:
                 "result": "not_connected",
                 **not_connected_summary(),
             }
-        target = registry.resolve(binding.target_id, user_id=context.user_id, roles=context.roles)
+        target = registry.resolve(binding.target_id)
         client = product_client(target, settings, context)
         summary = live_summary(target, client, connected=True)
         if summary["control"]["owned_by_requester"]:
@@ -155,7 +155,10 @@ def runtime() -> tuple[
     """Load request-scoped gateway configuration and state."""
     settings = GatewaySettings.from_env()
     context = current_gateway_context(settings)
-    registry = TargetRegistry.from_file(settings.target_registry_path)
+    registry = TargetRegistry.from_file(
+        settings.target_registry_path,
+        timeout_seconds=settings.request_timeout_seconds,
+    )
     store = (
         FileThreadTargetBindingStore.from_file(settings.binding_store_path)
         if settings.binding_store_path.exists()
@@ -175,7 +178,7 @@ def connected_target() -> tuple[GatewaySettings, GatewayRequestContext, Target] 
                 "当前 MCP 会话尚未连接装备",
                 **not_connected_summary(),
             )
-        target = registry.resolve(binding.target_id, user_id=context.user_id, roles=context.roles)
+        target = registry.resolve(binding.target_id)
         return settings, context, target
     except TargetRegistryError:
         return gateway_error("EQUIPMENT_NOT_FOUND", "已连接装备不再存在或当前用户未获授权")
