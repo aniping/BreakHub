@@ -158,48 +158,30 @@ try {
     }
     $fakeHubUrl = (Get-Content -LiteralPath $readyPath -Raw).Trim()
 
-    $targetOutput = (& $persistedManager targets upsert `
-        --scope project `
-        --project-root $testRoot `
-        --url $fakeHubUrl `
-        --access-token 'integration-test-token' 2>&1) -join [Environment]::NewLine
+    $mcpConnectionTest = Join-Path `
+        $repoRoot `
+        'scripts\breakpoint-debugging-manager\test_mcp_connection_exe.py'
+    $mcpConnectionOutput = (& $Python $mcpConnectionTest `
+        --mcp $commandPath `
+        --config $targetConfigPath `
+        --bindings (Join-Path $testRoot '.opencode\breakhub\breakhub_bindings.json') `
+        --cwd $testRoot `
+        --url $fakeHubUrl 2>&1) -join [Environment]::NewLine
     if ($LASTEXITCODE -ne 0) {
-        throw "Manager target upsert failed: $targetOutput"
+        throw "Packaged MCP connection management failed: $mcpConnectionOutput"
     }
-    if ($targetOutput -match 'integration-test-token|127\.0\.0\.1') {
-        throw 'Manager target upsert exposed a target URL or gateway token.'
-    }
-    $target = $targetOutput | ConvertFrom-Json
-    if ($target.equipment_id -ne 'equipment-test' -or -not $target.connection_id) {
-        throw 'Manager target upsert did not refresh the authoritative equipment identity.'
+    if ($mcpConnectionOutput -notmatch 'conversational connection management: passed') {
+        throw "Packaged MCP connection verification did not complete: $mcpConnectionOutput"
     }
     $targetConfig = Get-Content -LiteralPath $targetConfigPath -Raw | ConvertFrom-Json
     if ($targetConfig.version -ne 2) {
-        throw 'Manager did not persist target registry version 2.'
+        throw 'MCP did not persist target registry version 2.'
     }
     foreach ($connection in $targetConfig.connections) {
         $connectionProperties = @($connection.PSObject.Properties.Name)
         if (Compare-Object $connectionProperties @('url', 'access_token')) {
-            throw 'Manager persisted equipment identity instead of URL/token-only connection data.'
+            throw 'MCP persisted equipment identity instead of URL/token-only connection data.'
         }
-    }
-    $listedTargets = (& $persistedManager targets list `
-        --scope project `
-        --project-root $testRoot 2>&1) -join [Environment]::NewLine
-    if ($LASTEXITCODE -ne 0) {
-        throw "Manager target list failed: $listedTargets"
-    }
-    if ($listedTargets -notmatch 'equipment-test' -or
-        $listedTargets -match 'integration-test-token|127\.0\.0\.1') {
-        throw 'Manager target list did not return sanitized equipment data.'
-    }
-    $removeTargetOutput = (& $persistedManager targets remove `
-        --scope project `
-        --project-root $testRoot `
-        --connection-id $target.connection_id `
-        --yes 2>&1) -join [Environment]::NewLine
-    if ($LASTEXITCODE -ne 0) {
-        throw "Manager target remove failed: $removeTargetOutput"
     }
 
     $lockStream = [IO.File]::Open(

@@ -1,6 +1,6 @@
 # Breakpoint Debugging 安装与配置
 
-发布目录中的 `breakpoint-debugging-manager.exe` 是唯一的安装、卸载和运行期连接配置工具。它是独立 EXE，不要求用户安装 Python、PowerShell 7 或新版 .NET。
+发布目录中的 `breakpoint-debugging-manager.exe` 只负责安装、修复和卸载。它是独立 EXE，不要求用户安装 Python、PowerShell 7 或新版 .NET。运行期连接由 Agent 在对话中通过 MCP 管理。
 
 ## 安装
 
@@ -19,22 +19,17 @@
 - 项目安装：`<项目>\.opencode\breakhub\breakpoint-debugging-manager.exe`
 - 全局安装：`%USERPROFILE%\.config\opencode\breakhub\breakpoint-debugging-manager.exe`
 
-## 配置 BreakHub 连接
+## 在对话中配置 BreakHub 连接
 
 本地只保存 BreakHub URL 与访问 Token。设备 ID 和展示名不在本地重复配置；MCP 每次列举或连接时都从 BreakHub 的 `/api/v1/equipment` 刷新。
 
-```powershell
-# 新增或更新；省略 --access-token 时会安全提示输入，避免 Token 留在命令历史中
-.\breakpoint-debugging-manager.exe targets upsert --scope project --project-root C:\path\to\project --url 127.0.0.1:18621
-
-# 列出实时设备身份；输出不包含 URL 或 Token
-.\breakpoint-debugging-manager.exe targets list --scope project --project-root C:\path\to\project
-
-# 删除前先从 list 输出取得 connection_id，并明确确认
-.\breakpoint-debugging-manager.exe targets remove --scope project --project-root C:\path\to\project --connection-id connection-xxxxxxxxxxxx --yes
+```text
+列出当前 BreakHub 连接。
+把 127.0.0.1:18621 连接到 Breakpoint Debugging，访问 Token 是 <token>。
+删除连接 connection-xxxxxxxxxxxx。
 ```
 
-全局安装时把以上命令中的 `--scope project` 改为 `--scope global`。
+Agent 会分别调用 `microbreakpoint_list_connections`、`microbreakpoint_upsert_connection` 和 `microbreakpoint_remove_connection`。连接写入后会立即调用 `list_equipment` 获取 Hub 返回的设备身份。工具结果不会回显 URL 或 Token；删除前 Agent 必须获得明确确认。
 
 ## 卸载
 

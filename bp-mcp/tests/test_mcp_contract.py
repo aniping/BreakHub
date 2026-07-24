@@ -11,6 +11,7 @@ READ_ONLY_TOOLS = {
     "get_breakpoint",
     "get_interaction",
     "get_interface",
+    "list_connections",
     "list_equipment",
 }
 
@@ -25,13 +26,15 @@ WRITE_TOOLS = {
     "disconnect_equipment",
     "enable_breakpoint",
     "inject_interaction",
+    "remove_connection",
     "start_debugging",
+    "upsert_connection",
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_breakhub_exposes_the_eighteen_tool_public_contract() -> None:
+def test_breakhub_exposes_the_twenty_one_tool_public_contract() -> None:
     tools = asyncio.run(mcp_server.list_tools())
     annotations = {tool.name: tool.annotations for tool in tools}
 
@@ -43,6 +46,9 @@ def test_breakhub_exposes_the_eighteen_tool_public_contract() -> None:
     assert annotations["delete_breakpoints"].idempotentHint is True
     assert annotations["continue_interactions"].destructiveHint is True
     assert annotations["continue_interactions"].idempotentHint is True
+    assert annotations["upsert_connection"].idempotentHint is True
+    assert annotations["remove_connection"].destructiveHint is True
+    assert annotations["remove_connection"].idempotentHint is True
 
 
 def test_create_breakpoint_requires_an_explicit_condition_source() -> None:

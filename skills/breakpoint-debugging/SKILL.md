@@ -24,16 +24,22 @@ OpenCode prefixes each MCP tool with its configured server name. With the recomm
 
 Read [references/tool-reference.md](references/tool-reference.md) when exact arguments, condition syntax, paging, or error handling are needed. If the tools are absent in OpenCode, report that the integration is unavailable and direct the user to the release copy of `breakpoint-debugging-manager.exe`; lifecycle management is intentionally outside this Skill.
 
-## Manage equipment targets
+## Manage BreakHub connections
 
-Connection configuration belongs to the external `breakpoint-debugging-manager.exe`, not MCP tool arguments and not files embedded in this Skill. When the user asks to list, add, update, or remove a connection, direct them to its `targets` command. Do not ask the user to paste an access token into the conversation and do not edit `breakhub_targets.json` freehand. The user only supplies a BreakHub URL and access token; device ID and display information are refreshed from BreakHub. After a successful change, call `list_equipment` to verify that MCP sees the authoritative identity.
+Manage runtime connections entirely through MCP; never direct the user to an external configuration command and never edit `breakhub_targets.json` freehand.
+
+- Call `list_connections` to inspect configured connections and their live status. It intentionally returns neither URLs nor access tokens.
+- When the user supplies an IP:port or HTTP(S) URL and an access token, call `upsert_connection`. Never repeat the token in your response or any follow-up tool arguments. The tool validates `/api/v1/equipment` before saving and returns the authoritative equipment identity.
+- After a successful upsert, call `list_equipment` and continue with `connect_equipment` when requested.
+- Before `remove_connection`, state the returned `connection_id` and impact, then obtain explicit confirmation. Make the removal its own tool call.
+- If an unreachable connection needs repair, ask the user for that connection's URL and current access token, then call `upsert_connection`; do not ask them to run the manager EXE.
 
 ## Apply safety rules
 
 - Treat every tool result as structured state. If `ok` is false, report its stable error code and correct the cause before retrying.
 - If the error is `CONTROLLED_BY_WEB`, stop write attempts. The Web controller must release control; reads remain useful.
 - If the error is `CONTROLLED_BY_MCP`, do not compete with the other MCP instance.
-- Never expose target URLs, gateway tokens, control identities, or binding-store contents.
+- Never expose target URLs, access tokens, control identities, or binding-store contents. A token supplied by the user may appear only in the single `upsert_connection` call that consumes it.
 - Use returned stable IDs. Reuse a cursor only with the same query and filters; treat cursors as opaque.
 - Preserve JSON shape and types during injection. Change only fields shown by the latest interaction detail; do not add speculative fields or replace a whole object when a narrow nested patch is enough.
 - Injection does not continue a call. Always show the injected effective content before continuing unless the user explicitly requested a pre-approved end-to-end operation.

@@ -68,4 +68,4 @@ Hub 使用 [scripts/release/hub/application.yml](scripts/release/hub/application
 .\dist\breakpoint-debugging\breakpoint-debugging-manager.exe install --scope project --project-root .
 ```
 
-运行期连接也由同一个 EXE 管理。本地只保存 BreakHub URL 与访问 Token，MCP 会从 Hub 实时刷新设备 ID 和展示名，避免双份身份数据不一致。安装、配置、卸载和占用处理见 [scripts/release/breakpoint-debugging/README.md](scripts/release/breakpoint-debugging/README.md)；产品配置见 [bp-hub/README.md](bp-hub/README.md)。
+运行期连接直接在 Agent 对话中通过 MCP 管理，不需要用户运行外部配置命令。本地只保存 BreakHub URL 与访问 Token，MCP 会从 Hub 实时刷新设备 ID 和展示名，避免双份身份数据不一致。安装、对话配置、卸载和占用处理见 [scripts/release/breakpoint-debugging/README.md](scripts/release/breakpoint-debugging/README.md)；产品配置见 [bp-hub/README.md](bp-hub/README.md)。

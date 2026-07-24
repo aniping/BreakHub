@@ -1,6 +1,5 @@
 import argparse
 import ctypes
-import getpass
 import hashlib
 import json
 import os
@@ -16,8 +15,6 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 from urllib.parse import urlparse, urlunparse
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 
 
 SKILL_NAME = "breakpoint-debugging"
@@ -34,6 +31,7 @@ FORBIDDEN_SKILL_SCRIPTS = (
 TOOL_PERMISSIONS = {
     "microbreakpoint_*": "ask",
     "microbreakpoint_list_equipment": "allow",
+    "microbreakpoint_list_connections": "allow",
     "microbreakpoint_find_interfaces": "allow",
     "microbreakpoint_get_interface": "allow",
     "microbreakpoint_find_breakpoints": "allow",
@@ -667,14 +665,6 @@ def uninstall(
         print(f"Removed MCP data: {paths['data_root']}")
 
 
-def _target_config_path(
-    scope: str, project_root: Path, explicit: str | None
-) -> Path:
-    if explicit:
-        return Path(explicit).resolve()
-    return _resolve_paths(scope, project_root)["target_config"]
-
-
 def _normalize_breakhub_url(value: str) -> str:
     normalized = value.strip()
     if "://" not in normalized:
@@ -704,11 +694,6 @@ def _normalize_breakhub_url(value: str) -> str:
     ):
         authority += f":{port}"
     return urlunparse((scheme, authority, parsed.path.rstrip("/"), "", "", ""))
-
-
-def _connection_id(url: str) -> str:
-    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
-    return f"connection-{digest}"
 
 
 def _read_connections(path: Path) -> dict[str, Any]:
@@ -750,108 +735,6 @@ def _read_connections(path: Path) -> dict[str, Any]:
     return {"version": 2, "connections": connections}
 
 
-def _fetch_equipment(url: str, access_token: str) -> dict[str, str]:
-    request = Request(
-        url + "/api/v1/equipment",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/json",
-        },
-        method="GET",
-    )
-    try:
-        with urlopen(request, timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, UnicodeError, json.JSONDecodeError) as error:
-        raise ManagerError("Cannot refresh equipment identity from BreakHub") from error
-    if not isinstance(payload, dict):
-        raise ManagerError("BreakHub returned an invalid equipment identity")
-    equipment_id = str(payload.get("equipment_id") or "").strip()
-    display_name = str(payload.get("display_name") or equipment_id).strip()
-    if not equipment_id:
-        raise ManagerError("BreakHub returned an empty equipment ID")
-    return {"equipment_id": equipment_id, "display_name": display_name or equipment_id}
-
-
-def list_targets(config_path: Path) -> None:
-    registry = _read_connections(config_path)
-    listed = []
-    for connection in registry["connections"]:
-        connection_id = _connection_id(connection["url"])
-        try:
-            equipment = _fetch_equipment(
-                connection["url"], connection["access_token"]
-            )
-            listed.append(
-                {
-                    "connection_id": connection_id,
-                    **equipment,
-                    "status": "available",
-                }
-            )
-        except ManagerError:
-            listed.append({"connection_id": connection_id, "status": "unreachable"})
-    print(json.dumps(listed, ensure_ascii=False, indent=2))
-
-
-def upsert_target(
-    config_path: Path,
-    url: str,
-    access_token: str | None,
-) -> None:
-    normalized_url = _normalize_breakhub_url(url)
-    token = (access_token or "").strip()
-    if not token:
-        token = getpass.getpass("BreakHub access token: ").strip()
-    if not token:
-        raise ManagerError("Access token is required")
-    equipment = _fetch_equipment(normalized_url, token)
-    registry = _read_connections(config_path)
-    connections = registry["connections"]
-    replacement = {"url": normalized_url, "access_token": token}
-    for index, connection in enumerate(connections):
-        if connection["url"] == normalized_url:
-            connections[index] = replacement
-            break
-    else:
-        connections.append(replacement)
-    _write_config(config_path, registry)
-    print(
-        json.dumps(
-            {
-                "connection_id": _connection_id(normalized_url),
-                **equipment,
-                "status": "available",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-
-
-def remove_target(config_path: Path, connection_id: str, confirmed: bool) -> None:
-    normalized_id = connection_id.strip()
-    if not normalized_id:
-        raise ManagerError("Connection ID is required")
-    registry = _read_connections(config_path)
-    connections = registry["connections"]
-    matching_indexes = [
-        index
-        for index, connection in enumerate(connections)
-        if _connection_id(connection["url"]) == normalized_id
-    ]
-    if not matching_indexes:
-        print(f"Connection is already absent: {normalized_id}")
-        return
-    if len(matching_indexes) > 1:
-        raise ManagerError("Target registry contains duplicate connection IDs")
-    if not confirmed:
-        raise ManagerError("Connection removal requires --yes after explicit user confirmation")
-    del connections[matching_indexes[0]]
-    _write_config(config_path, registry)
-    print(f"Updated target registry: {config_path}")
-
-
 def _interactive_arguments() -> list[str]:
     print("Breakpoint Debugging Manager")
     print("  [1] Install or repair (default)")
@@ -876,26 +759,6 @@ def _build_parser() -> argparse.ArgumentParser:
     uninstall_parser.add_argument("--scope", choices=("project", "global"), default="project")
     uninstall_parser.add_argument("--project-root", default="")
     uninstall_parser.add_argument("--remove-data", action="store_true")
-    targets_parser = subparsers.add_parser("targets", help="Manage equipment targets")
-    target_commands = targets_parser.add_subparsers(dest="target_command", required=True)
-
-    def add_target_location(command_parser: argparse.ArgumentParser) -> None:
-        command_parser.add_argument(
-            "--scope", choices=("project", "global"), default="project"
-        )
-        command_parser.add_argument("--project-root", default="")
-        command_parser.add_argument("--config", default="")
-
-    list_parser = target_commands.add_parser("list", help="List targets without secrets")
-    add_target_location(list_parser)
-    upsert_parser = target_commands.add_parser("upsert", help="Add or update a target")
-    add_target_location(upsert_parser)
-    upsert_parser.add_argument("--url", required=True)
-    upsert_parser.add_argument("--access-token")
-    remove_parser = target_commands.add_parser("remove", help="Remove a target")
-    add_target_location(remove_parser)
-    remove_parser.add_argument("--connection-id", required=True)
-    remove_parser.add_argument("--yes", action="store_true")
     return parser
 
 
@@ -914,20 +777,6 @@ def main(arguments: Sequence[str] | None = None) -> int:
             install(options.scope, project_root, _locate_package(options.package or None))
         elif options.command == "uninstall":
             uninstall(options.scope, project_root, options.remove_data)
-        elif options.command == "targets":
-            target_config = _target_config_path(
-                options.scope, project_root, options.config or None
-            )
-            if options.target_command == "list":
-                list_targets(target_config)
-            elif options.target_command == "upsert":
-                upsert_target(
-                    target_config,
-                    options.url,
-                    options.access_token,
-                )
-            else:
-                remove_target(target_config, options.connection_id, options.yes)
         return 0
     except (ManagerError, OSError, ValueError, zipfile.BadZipFile) as error:
         print(f"Error: {error}", file=sys.stderr)

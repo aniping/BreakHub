@@ -1,15 +1,31 @@
-"""The authoritative 18 Agent-facing BreakHub tool handlers."""
+"""The authoritative Agent-facing BreakHub tool handlers."""
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
 from bp_mcp import (
+    connection_gateway,
     equipment_gateway,
     interaction_gateway,
     interface_breakpoint_gateway,
 )
 from bp_mcp.breakpoint_contract import BreakpointConditionsInput
+
+
+def list_connections() -> dict[str, Any]:
+    """列出 BreakHub 连接及实时设备身份，不暴露端点或访问令牌。"""
+    return connection_gateway.list_connections()
+
+
+def upsert_connection(url: str, access_token: str) -> dict[str, Any]:
+    """在对话中验证并新增或更新一个 BreakHub URL 与访问令牌。"""
+    return connection_gateway.upsert_connection(url, access_token)
+
+
+def remove_connection(connection_id: str) -> dict[str, Any]:
+    """经用户确认后按连接 ID 幂等删除一个 BreakHub 连接。"""
+    return connection_gateway.remove_connection(connection_id)
 
 
 def list_equipment() -> dict[str, Any]:

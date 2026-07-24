@@ -14,6 +14,9 @@ TOOL_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
     "list_equipment": tools.list_equipment,
     "connect_equipment": tools.connect_equipment,
     "disconnect_equipment": tools.disconnect_equipment,
+    "list_connections": tools.list_connections,
+    "upsert_connection": tools.upsert_connection,
+    "remove_connection": tools.remove_connection,
     "find_interfaces": tools.find_interfaces,
     "get_interface": tools.get_interface,
     "find_breakpoints": tools.find_breakpoints,
@@ -33,6 +36,7 @@ TOOL_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
 
 READ_ONLY_TOOLS = {
     "list_equipment",
+    "list_connections",
     "find_interfaces",
     "get_interface",
     "find_breakpoints",
@@ -46,6 +50,15 @@ TOOL_ANNOTATIONS = {
     for tool_name in TOOL_HANDLERS
 }
 TOOL_ANNOTATIONS.update({
+    "upsert_connection": {
+        "readOnlyHint": False,
+        "idempotentHint": True,
+    },
+    "remove_connection": {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+    },
     "delete_breakpoints": {
         "readOnlyHint": False,
         "destructiveHint": True,

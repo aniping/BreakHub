@@ -211,6 +211,14 @@ def test_equipment_input_schemas_remain_exact_after_later_tool_slices():
     assert schemas["connect_equipment"]["required"] == ["equipment_id"]
     assert set(schemas["connect_equipment"]["properties"]) == {"equipment_id"}
     assert schemas["connect_equipment"]["additionalProperties"] is False
+    assert schemas["list_connections"]["properties"] == {}
+    assert schemas["upsert_connection"]["required"] == ["url", "access_token"]
+    assert set(schemas["upsert_connection"]["properties"]) == {
+        "url",
+        "access_token",
+    }
+    assert schemas["remove_connection"]["required"] == ["connection_id"]
+    assert set(schemas["remove_connection"]["properties"]) == {"connection_id"}
 
     with pytest.raises(ValidationError):
         asyncio.run(mcp_server.call_tool("connect_equipment", {}))
@@ -240,6 +248,73 @@ def test_registry_rejects_equivalent_url_spellings_before_refresh():
                 ],
             }
         )
+
+
+def test_connections_can_be_managed_entirely_through_mcp(
+    tmp_path, monkeypatch, product_server
+):
+    _state, product_url = product_server
+    registry_path = tmp_path / "conversation-connections.json"
+    registry_path.write_text(
+        '{"version": 2, "connections": []}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MCP_GATEWAY_TARGETS_PATH", str(registry_path))
+    monkeypatch.setenv("MCP_GATEWAY_BINDINGS_PATH", str(tmp_path / "bindings.json"))
+    monkeypatch.setenv("REQUEST_TIMEOUT_SECONDS", "1")
+
+    initial = call_tool("list_equipment", {})
+    assert initial == {
+        "ok": True,
+        "equipment": [],
+        "refresh": {"unreachable_connections": 0},
+    }
+
+    added = call_tool(
+        "upsert_connection",
+        {
+            "url": product_url.removeprefix("http://"),
+            "access_token": "gateway-secret",
+        },
+    )
+    assert added["ok"] is True
+    assert added["result"] == "created"
+    assert added["connection"]["status"] == "available"
+    assert added["connection"]["equipment_id"] == "equipment-01"
+    connection_id = added["connection"]["connection_id"]
+    added_json = json.dumps(added, ensure_ascii=False)
+    assert product_url not in added_json
+    assert "gateway-secret" not in added_json
+    assert json.loads(registry_path.read_text(encoding="utf-8")) == {
+        "version": 2,
+        "connections": [
+            {"url": product_url, "access_token": "gateway-secret"},
+        ],
+    }
+
+    listed = call_tool("list_connections", {})
+    assert listed == {
+        "ok": True,
+        "connections": [added["connection"]],
+    }
+    equipment = call_tool("list_equipment", {})
+    assert [item["equipment_id"] for item in equipment["equipment"]] == [
+        "equipment-01"
+    ]
+
+    removed = call_tool(
+        "remove_connection",
+        {"connection_id": connection_id},
+    )
+    assert removed == {
+        "ok": True,
+        "result": "removed",
+        "connection_id": connection_id,
+    }
+    assert call_tool("list_connections", {}) == {
+        "ok": True,
+        "connections": [],
+    }
 
 
 def test_list_equipment_returns_safe_authorized_summaries(gateway_config):

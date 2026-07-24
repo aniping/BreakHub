@@ -1,4 +1,4 @@
-"""Test-only BreakHub identity endpoint for manager executable integration tests."""
+"""Test-only BreakHub identity endpoint for MCP executable integration tests."""
 
 import json
 import sys
