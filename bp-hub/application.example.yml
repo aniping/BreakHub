@@ -1,0 +1,30 @@
+server:
+  address: 127.0.0.1
+  port: 18621
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+
+breakhub:
+  data-directory: D:/breakhub/data
+
+  equipment:
+    id: equipment-01
+    display-name: 一号装备
+    debugger-switch:
+      url: http://127.0.0.1:18622/api/demo/debugger/enabled
+
+  security:
+    web-username: admin
+    web-password: 请替换为管理员密码
+    gateway-token: 请替换为Gateway接口密钥
+    business-client-token: 请替换为业务接入端接口密钥
+
+  control-lease:
+    timeout: 30m
+
+  interaction:
+    pause-timeout: 25m
+    max-payload-size: 16MB

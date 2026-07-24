@@ -1,0 +1,25 @@
+# IDE and local agent state
+.idea/
+.vscode/
+.opencode/breakhub/
+
+# Java
+**/target/
+bp-hub/application.yml
+
+# Node.js
+**/node_modules/
+bp-hub/web/dist/
+
+# Python
+**/__pycache__/
+**/*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build and release output
+build/
+dist/
+bp-mcp/build/
+bp-mcp/dist/

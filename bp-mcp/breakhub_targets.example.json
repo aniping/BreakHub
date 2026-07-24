@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "targets": [
+    {
+      "equipment_id": "equipment-01",
+      "display_name": "Local BreakHub",
+      "description": "本地 BreakHub 装备",
+      "breakpoint_url": "http://127.0.0.1:18621",
+      "gateway_token": "replace-with-product-gateway-token",
+      "enabled": true,
+      "metadata": {
+        "deployment_note": "Edit this URL to the equipment breakpoint program address before production use."
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+server:
+  address: 127.0.0.1
+  port: 18622
+
+debugger:
+  server-url: http://127.0.0.1:18621
+  business-client-token: breakhub-local-business-token
+  service-name: instrument-service-demo
+  connect-timeout-ms: 300
+  read-timeout-ms: 1000
+  breakpoint-timeout-ms: 300000
