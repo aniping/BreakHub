@@ -19,7 +19,7 @@ def list_connections() -> dict[str, Any]:
 
 
 def upsert_connection(url: str, access_token: str) -> dict[str, Any]:
-    """在对话中验证并新增或更新一个 BreakHub URL 与访问令牌。"""
+    """验证并新增或更新 BreakHub 连接；URL 未指定端口时使用 18621。"""
     return connection_gateway.upsert_connection(url, access_token)
 
 

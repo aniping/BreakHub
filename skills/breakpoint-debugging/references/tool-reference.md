@@ -16,10 +16,10 @@ OpenCode registers each tool as `<server-name>_<tool-name>`. The examples assume
 | Tool suffix | Arguments | Use |
 | --- | --- | --- |
 | `list_connections` | none | List safe connection IDs, live equipment identity, and availability without returning URLs or tokens. |
-| `upsert_connection` | `url`, `access_token` | Validate a BreakHub IP:port or HTTP(S) URL and atomically add or update its connection. |
+| `upsert_connection` | `url`, `access_token` | Validate a BreakHub host, IP, or HTTP(S) URL and atomically add or update its connection; use port `18621` when omitted. |
 | `remove_connection` | `connection_id` | Idempotently remove one exact connection after explicit user confirmation. |
 
-Use these tools inside the conversation; do not send the user to `breakpoint-debugging-manager.exe` for runtime configuration. `upsert_connection` first reads `/api/v1/equipment`, so an invalid URL or token is not persisted. Its result never repeats the URL or token. After a successful write, call `list_equipment` to use the freshly resolved equipment ID.
+Use these tools inside the conversation; do not send the user to `breakpoint-debugging-manager.exe` for runtime configuration. When the user omits a port, proceed with `18621` instead of asking for one. `upsert_connection` first reads `/api/v1/equipment`, so an invalid URL or token is not persisted. Its result never repeats the URL or token. After a successful write, call `list_equipment` to use the freshly resolved equipment ID.
 
 `EQUIPMENT_ALREADY_CONNECTED` means the current MCP identity is bound to another equipment. Disconnect deliberately before switching. `EQUIPMENT_UNREACHABLE` does not create a new binding. `CONTROLLED_BY_WEB` and `CONTROLLED_BY_MCP` block writes; do not retry in a loop.
 

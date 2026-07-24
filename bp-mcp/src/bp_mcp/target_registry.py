@@ -13,6 +13,8 @@ from urllib.parse import urlparse, urlunparse
 
 from bp_mcp.client import BreakHubClient, BreakHubError
 
+DEFAULT_BREAKHUB_PORT = 18621
+
 
 class TargetRegistryError(RuntimeError):
     """Raised when target connection configuration is missing or invalid."""
@@ -74,11 +76,12 @@ class TargetConnection:
         scheme = parsed.scheme.lower()
         host = hostname.lower()
         authority = f"[{host}]" if ":" in host else host
-        if port is not None and not (
-            (scheme == "http" and port == 80)
-            or (scheme == "https" and port == 443)
+        effective_port = port if port is not None else DEFAULT_BREAKHUB_PORT
+        if not (
+            (scheme == "http" and effective_port == 80)
+            or (scheme == "https" and effective_port == 443)
         ):
-            authority += f":{port}"
+            authority += f":{effective_port}"
         canonical_url = urlunparse(
             (scheme, authority, parsed.path.rstrip("/"), "", "", "")
         )

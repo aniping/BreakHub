@@ -19,6 +19,7 @@ from urllib.parse import urlparse, urlunparse
 
 SKILL_NAME = "breakpoint-debugging"
 MCP_SERVER_KEY = "microbreakpoint"
+DEFAULT_BREAKHUB_PORT = 18621
 MANAGER_NAME = "breakpoint-debugging-manager.exe"
 MANAGER_PERMISSION_PATTERN = "*breakpoint-debugging-manager.exe*"
 MCP_EXE_RELATIVE = Path("scripts/mcp/breakhub-mcp.exe")
@@ -689,10 +690,12 @@ def _normalize_breakhub_url(value: str) -> str:
     scheme = parsed.scheme.lower()
     host = hostname.lower()
     authority = f"[{host}]" if ":" in host else host
-    if port is not None and not (
-        (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+    effective_port = port if port is not None else DEFAULT_BREAKHUB_PORT
+    if not (
+        (scheme == "http" and effective_port == 80)
+        or (scheme == "https" and effective_port == 443)
     ):
-        authority += f":{port}"
+        authority += f":{effective_port}"
     return urlunparse((scheme, authority, parsed.path.rstrip("/"), "", "", ""))
 
 

@@ -59,7 +59,7 @@ try {
     {
       "equipment_id": "legacy-enabled",
       "display_name": "Must Not Be Persisted",
-      "breakpoint_url": "http://127.0.0.1:1",
+      "breakpoint_url": "http://127.0.0.1",
       "gateway_token": "legacy-token",
       "enabled": true
     },
@@ -93,8 +93,9 @@ try {
     $migratedJson = $migratedTargets | ConvertTo-Json -Depth 10 -Compress
     if ($migratedTargets.version -ne 2 -or
         @($migratedTargets.connections).Count -ne 1 -or
+        $migratedTargets.connections[0].url -ne 'http://127.0.0.1:18621' -or
         $migratedJson -match 'equipment_id|display_name|legacy-disabled|disabled-token') {
-        throw 'Manager did not migrate the legacy target registry to URL/token-only v2.'
+        throw 'Manager did not migrate the legacy target registry to URL/token-only v2 with the default port.'
     }
 
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json

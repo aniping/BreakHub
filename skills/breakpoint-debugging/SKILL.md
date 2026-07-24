@@ -29,7 +29,7 @@ Read [references/tool-reference.md](references/tool-reference.md) when exact arg
 Manage runtime connections entirely through MCP; never direct the user to an external configuration command and never edit `breakhub_targets.json` freehand.
 
 - Call `list_connections` to inspect configured connections and their live status. It intentionally returns neither URLs nor access tokens.
-- When the user supplies an IP:port or HTTP(S) URL and an access token, call `upsert_connection`. Never repeat the token in your response or any follow-up tool arguments. The tool validates `/api/v1/equipment` before saving and returns the authoritative equipment identity.
+- When the user supplies a host, IP, or HTTP(S) URL and an access token, call `upsert_connection`. If the input has no explicit port, use the BreakHub default `18621`; do not ask for a port unless the user needs a different one. Never repeat the token in your response or any follow-up tool arguments. The tool validates `/api/v1/equipment` before saving and returns the authoritative equipment identity.
 - After a successful upsert, call `list_equipment` and continue with `connect_equipment` when requested.
 - Before `remove_connection`, state the returned `connection_id` and impact, then obtain explicit confirmation. Make the removal its own tool call.
 - If an unreachable connection needs repair, ask the user for that connection's URL and current access token, then call `upsert_connection`; do not ask them to run the manager EXE.

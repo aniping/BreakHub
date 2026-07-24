@@ -238,7 +238,7 @@ def test_registry_rejects_equivalent_url_spellings_before_refresh():
                 "version": 2,
                 "connections": [
                     {
-                        "url": "HTTP://LOCALHOST:80/",
+                        "url": "HTTP://LOCALHOST:18621/",
                         "access_token": "first",
                     },
                     {
@@ -314,6 +314,52 @@ def test_connections_can_be_managed_entirely_through_mcp(
     assert call_tool("list_connections", {}) == {
         "ok": True,
         "connections": [],
+    }
+
+
+def test_upsert_connection_uses_breakhub_default_port_when_omitted(
+    tmp_path, monkeypatch
+):
+    registry_path = tmp_path / "default-port-connections.json"
+    registry_path.write_text(
+        '{"version": 2, "connections": []}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MCP_GATEWAY_TARGETS_PATH", str(registry_path))
+    monkeypatch.setenv("MCP_GATEWAY_BINDINGS_PATH", str(tmp_path / "bindings.json"))
+
+    class EquipmentResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "equipment_id": "equipment-default-port",
+                "display_name": "Default Port",
+            }
+
+    def request(method, url, **_kwargs):
+        assert method == "GET"
+        assert url == "http://breakhub.test:18621/api/v1/equipment"
+        return EquipmentResponse()
+
+    monkeypatch.setattr("bp_mcp.client.requests.request", request)
+
+    added = call_tool(
+        "upsert_connection",
+        {"url": "breakhub.test", "access_token": "gateway-secret"},
+    )
+
+    assert added["ok"] is True
+    assert added["connection"]["equipment_id"] == "equipment-default-port"
+    assert json.loads(registry_path.read_text(encoding="utf-8")) == {
+        "version": 2,
+        "connections": [
+            {
+                "url": "http://breakhub.test:18621",
+                "access_token": "gateway-secret",
+            }
+        ],
     }
 
 

@@ -20,4 +20,4 @@ pwsh -File .\scripts\build-exe.ps1
 ```
 
 产物为 `dist/breakhub-mcp.exe`。连接注册表示例见
-`breakhub_targets.example.json`。安装管理器会把可变配置放在 Skill 目录之外；配置只包含 BreakHub URL 与访问 Token。Agent 通过 `list_connections`、`upsert_connection` 和 `remove_connection` 在 MCP 对话中管理连接，MCP 在每次列举或连接时从 `/api/v1/equipment` 刷新权威设备身份。
+`breakhub_targets.example.json`。安装管理器会把可变配置放在 Skill 目录之外；配置只包含 BreakHub URL 与访问 Token。Agent 通过 `list_connections`、`upsert_connection` 和 `remove_connection` 在 MCP 对话中管理连接；URL 未显式指定端口时使用 BreakHub 默认端口 `18621`。MCP 在每次列举或连接时从 `/api/v1/equipment` 刷新权威设备身份。

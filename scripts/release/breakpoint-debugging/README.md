@@ -25,11 +25,11 @@
 
 ```text
 列出当前 BreakHub 连接。
-把 127.0.0.1:18621 连接到 Breakpoint Debugging，访问 Token 是 <token>。
+把 127.0.0.1 连接到 Breakpoint Debugging，访问 Token 是 <token>。
 删除连接 connection-xxxxxxxxxxxx。
 ```
 
-Agent 会分别调用 `microbreakpoint_list_connections`、`microbreakpoint_upsert_connection` 和 `microbreakpoint_remove_connection`。连接写入后会立即调用 `list_equipment` 获取 Hub 返回的设备身份。工具结果不会回显 URL 或 Token；删除前 Agent 必须获得明确确认。
+Agent 会分别调用 `microbreakpoint_list_connections`、`microbreakpoint_upsert_connection` 和 `microbreakpoint_remove_connection`。未提供端口时自动使用 BreakHub 默认端口 `18621`；显式端口保持不变。连接写入后会立即调用 `list_equipment` 获取 Hub 返回的设备身份。工具结果不会回显 URL 或 Token；删除前 Agent 必须获得明确确认。
 
 ## 卸载
 
