@@ -11,7 +11,7 @@
 - `bp-hub/`：BreakHub 权威后端与 Web。
 - `bp-probe/<language>/`：按语言组织的业务探针。
 - `bp-mcp/`：本地 stdio MCP；EXE 名为 `breakhub-mcp.exe`。
-- `bp-skill/`：标准 Skill 源码；不得提交生成的 EXE。
+- `skills/breakpoint-debugging/`：标准 Skill 源码；不得提交生成的 EXE。
 - `example/`：集成验证，不作为发布产物。
 
 OpenCode MCP 服务键和工具前缀 `microbreakpoint_*` 是保留的外部契约，不得随产品重命名而修改。

@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$skillName = 'bp-skill'
+$skillName = 'breakpoint-debugging'
 
 function Read-OpenCodeConfig {
     param([string]$Path)

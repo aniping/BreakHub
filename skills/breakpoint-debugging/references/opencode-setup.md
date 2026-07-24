@@ -1,6 +1,6 @@
 # OpenCode setup
 
-The release ZIP contains one top-level `bp-skill/` skill directory. Its MCP runtime is isolated under `scripts/mcp/`; do not move the executable out of that directory after installation.
+The release ZIP contains one top-level `breakpoint-debugging/` skill directory. Its MCP runtime is isolated under `scripts/mcp/`; do not move the executable out of that directory after installation.
 
 ## Contents
 
@@ -16,17 +16,17 @@ From the BreakHub repository root, run:
 
 ```powershell
 conda activate breakhub
-.\scripts\package-bp-skill.ps1
+.\scripts\package-breakpoint-debugging.ps1
 ```
 
-The script builds the `PyInstaller -F` executable, runs the Codex skill validator when available, stages a clean standard skill directory, and writes `dist/bp-skill.zip`.
+The script builds the `PyInstaller -F` executable, runs the Codex skill validator when available, stages a clean standard skill directory, and writes `dist/breakpoint-debugging.zip`.
 
 ## Install or reinstall
 
 Prefer AI-managed installation. The user only needs to provide the release ZIP and say:
 
 ```text
-Install this BreakHub Skill into the current project and verify the MCP connection.
+Install the Breakpoint Debugging Skill for BreakHub into the current project and verify the MCP connection.
 ```
 
 The agent should run the simple installer itself and pass `-Scope Project` unless the user requests a global installation. The installer extracts the package, installs the files, merges the MCP and permission configuration, and verifies the connection. Do not ask the user to copy extraction, installation, or configuration commands.
@@ -34,7 +34,7 @@ The agent should run the simple installer itself and pass `-Scope Project` unles
 For a manual fallback from the repository root, run one command:
 
 ```powershell
-.\scripts\install-bp-skill.ps1
+.\scripts\install-breakpoint-debugging.ps1
 ```
 
 The script finds the ZIP, extracts it temporarily, detects the nearest project root, installs the files, updates OpenCode configuration, verifies the MCP connection, and removes the temporary files. It asks the user to choose the current project or global OpenCode directory; pressing Enter defaults to the current project. Existing configuration values are preserved semantically; when an existing JSONC file contains comments or custom formatting, the deterministic merge normalizes them to JSON formatting.
@@ -42,23 +42,23 @@ The script finds the ZIP, extracts it temporarily, detects the nearest project r
 For an agent or another non-interactive caller, select the current project explicitly:
 
 ```powershell
-.\scripts\install-bp-skill.ps1 -Scope Project
+.\scripts\install-breakpoint-debugging.ps1 -Scope Project
 ```
 
 Or select the global directory explicitly:
 
 ```powershell
-.\scripts\install-bp-skill.ps1 -Scope Global
+.\scripts\install-breakpoint-debugging.ps1 -Scope Global
 ```
 
-When distributing only release artifacts, keep `install-bp-skill.ps1` beside `bp-skill.zip` and run the same short command from that directory.
+When distributing only release artifacts, keep `install-breakpoint-debugging.ps1` beside `breakpoint-debugging.zip` and run the installer from that directory.
 
 The installer prints the exact paths to use. The standard locations are:
 
 | Scope | Skill and MCP executable | Mutable MCP data |
 | --- | --- | --- |
-| Project | `<project>/.opencode/skills/bp-skill/scripts/mcp/breakhub-mcp.exe` | `<project>/.opencode/breakhub/` |
-| Global | `~/.config/opencode/skills/bp-skill/scripts/mcp/breakhub-mcp.exe` | `~/.config/opencode/breakhub/` |
+| Project | `<project>/.opencode/skills/breakpoint-debugging/scripts/mcp/breakhub-mcp.exe` | `<project>/.opencode/breakhub/` |
+| Global | `~/.config/opencode/skills/breakpoint-debugging/scripts/mcp/breakhub-mcp.exe` | `~/.config/opencode/breakhub/` |
 
 The installer creates `breakhub_targets.json` only when it is missing. Reinstalling the skill does not overwrite target configuration or bindings.
 
@@ -70,17 +70,17 @@ Use the installed `scripts/manage-targets.ps1` script. It never prints target UR
 
 ```powershell
 # List
-pwsh -File .\.opencode\skills\bp-skill\scripts\manage-targets.ps1 `
+pwsh -File .\.opencode\skills\breakpoint-debugging\scripts\manage-targets.ps1 `
   -Scope Project -Action List
 
 # Add or update; an omitted token is preserved for an existing target
-pwsh -File .\.opencode\skills\bp-skill\scripts\manage-targets.ps1 `
+pwsh -File .\.opencode\skills\breakpoint-debugging\scripts\manage-targets.ps1 `
   -Scope Project -Action Upsert -EquipmentId 'equipment-02' `
   -DisplayName 'VNA Lab' -BreakpointUrl 'http://127.0.0.1:18621' `
   -GatewayToken '<gateway-token>' -Confirm:$false
 
 # Remove only after explicit user confirmation
-pwsh -File .\.opencode\skills\bp-skill\scripts\manage-targets.ps1 `
+pwsh -File .\.opencode\skills\breakpoint-debugging\scripts\manage-targets.ps1 `
   -Scope Project -Action Remove -EquipmentId 'equipment-02' -Confirm:$false
 ```
 
@@ -99,7 +99,7 @@ Merge the following entries into the project `opencode.jsonc`. The example uses 
     "microbreakpoint": {
       "type": "local",
       "command": [
-        ".opencode/skills/bp-skill/scripts/mcp/breakhub-mcp.exe"
+        ".opencode/skills/breakpoint-debugging/scripts/mcp/breakhub-mcp.exe"
       ],
       "cwd": ".",
       "enabled": true,
@@ -114,7 +114,7 @@ Merge the following entries into the project `opencode.jsonc`. The example uses 
   },
   "permission": {
     "skill": {
-      "bp-skill": "allow"
+      "breakpoint-debugging": "allow"
     },
     "bash": {
       "*manage-targets.ps1*": "ask"
@@ -142,7 +142,7 @@ Run `opencode mcp list`, then call `microbreakpoint_list_equipment`. A structure
 Close OpenCode, then run the installed or extracted uninstall script. It removes the `microbreakpoint` MCP registration and BreakHub permission entries without replacing unrelated OpenCode settings:
 
 ```powershell
-pwsh -File .\.opencode\skills\bp-skill\scripts\uninstall.ps1 `
+pwsh -File .\.opencode\skills\breakpoint-debugging\scripts\uninstall.ps1 `
   -Scope Project `
   -ProjectRoot (Get-Location).Path
 ```

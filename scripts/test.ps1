@@ -37,7 +37,7 @@ finally {
     Pop-Location
 }
 
-& (Join-Path $repoRoot 'scripts\package-bp-skill.ps1') -Python $Python
+& (Join-Path $repoRoot 'scripts\package-breakpoint-debugging.ps1') -Python $Python
 if ($LASTEXITCODE -ne 0) { throw 'Skill packaging failed.' }
-& (Join-Path $repoRoot 'scripts\test-bp-skill-install.ps1')
+& (Join-Path $repoRoot 'scripts\test-breakpoint-debugging-install.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Skill install/uninstall tests failed.' }

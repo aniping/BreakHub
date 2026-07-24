@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$skillName = 'bp-skill'
+$skillName = 'breakpoint-debugging'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 function Find-ProjectRoot {
@@ -181,7 +181,7 @@ function Register-OpenCodeMcp {
     $skillPermission = Get-ConfigObject -Target $permission -Name 'skill'
     Set-ConfigProperty `
         -Target $skillPermission `
-        -Name 'bp-skill' `
+        -Name $skillName `
         -Value 'allow'
     $bashPermission = Get-ConfigObject -Target $permission -Name 'bash'
     Set-ConfigProperty -Target $bashPermission -Name '*manage-targets.ps1*' -Value 'ask'

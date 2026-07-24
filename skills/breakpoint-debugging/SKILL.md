@@ -1,9 +1,9 @@
 ---
-name: bp-skill
-description: Install, reinstall, or repair the BreakHub Skill and local stdio MCP integration; discover instrument interfaces, capture call records, manage before/after breakpoints, inspect paused interactions, inject parameter or result changes, continue calls safely, and manage the OpenCode equipment target registry. Use for OpenCode 安装或重装、MCP 连接修复、断点调试、调用记录捕捉、参数注入、返回值修改、设备连接、接口发现、暂停调用排查，以及新增、修改或删除 BreakHub 设备配置。
+name: breakpoint-debugging
+description: Install, reinstall, or repair the Breakpoint Debugging Skill and its BreakHub local stdio MCP integration; discover instrument interfaces, capture call records, manage before/after breakpoints, inspect paused interactions, inject parameter or result changes, continue calls safely, and manage the OpenCode equipment target registry. Use for OpenCode 安装或重装、MCP 连接修复、断点调试、调用记录捕捉、参数注入、返回值修改、设备连接、接口发现、暂停调用排查，以及新增、修改或删除 BreakHub 设备配置。
 ---
 
-# BreakHub Debugging
+# Breakpoint Debugging
 
 Use the BreakHub MCP tools as the source of truth for breakpoint state. Do not call the product HTTP API or edit its state files when the MCP tools are available.
 

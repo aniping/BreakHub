@@ -9,7 +9,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 | `bp-hub/` | Java 17 / Spring Boot 后端和同目录 Vue Web |
 | `bp-probe/java/` | Java 探针依赖；以后新增语言时在 `bp-probe/` 下增加同级目录 |
 | `bp-mcp/` | 独立 Python MCP 项目，构建 `breakhub-mcp.exe` |
-| `bp-skill/` | 标准 Agent Skill 源目录，发布时注入 MCP EXE |
+| `skills/breakpoint-debugging/` | Breakpoint Debugging Skill 源目录，发布时注入 MCP EXE |
 | `example/java/` | Java 集成示例，仅用于验证，不作为发布产物 |
 | `scripts/` | 仓库级构建、测试、打包和 Skill 安装入口 |
 
@@ -38,20 +38,20 @@ pwsh -File .\scripts\test.ps1 -Python 'python'
 pwsh -File .\scripts\package.ps1 -Python 'python'
 ```
 
-`package.ps1` 生成三个独立发布物：Hub JAR、Java Probe JAR 和 `bp-skill.zip`。Skill ZIP 内含 `breakhub-mcp.exe`；`example/java` 不进入发布目录。
+`package.ps1` 生成三个独立发布物：Hub JAR、Java Probe JAR 和 `breakpoint-debugging.zip`。Skill ZIP 内含 `breakhub-mcp.exe`；`example/java` 不进入发布目录。
 
 ## 安装 Skill
 
-优先让 Agent 执行安装。把 `dist/bp-skill.zip` 和 `dist/install-bp-skill.ps1` 放在一起，然后告诉 OpenCode：
+优先让 Agent 执行安装。把 `dist/breakpoint-debugging.zip` 和 `dist/install-breakpoint-debugging.ps1` 放在一起，然后告诉 OpenCode：
 
 ```text
-安装这个 BreakHub Skill 到当前项目，并验证 MCP 连接。
+安装这个用于 BreakHub 的 Breakpoint Debugging Skill 到当前项目，并验证 MCP 连接。
 ```
 
 手工兜底只需一条命令，默认安装到当前项目；也可以显式传 `-Scope Global`：
 
 ```powershell
-pwsh -File .\dist\install-bp-skill.ps1
+pwsh -File .\dist\install-breakpoint-debugging.ps1
 ```
 
-详细产品配置见 [bp-hub/README.md](bp-hub/README.md)，Agent 工作流与卸载说明见 [bp-skill/references/opencode-setup.md](bp-skill/references/opencode-setup.md)。
+详细产品配置见 [bp-hub/README.md](bp-hub/README.md)，Agent 工作流与卸载说明见 [skills/breakpoint-debugging/references/opencode-setup.md](skills/breakpoint-debugging/references/opencode-setup.md)。

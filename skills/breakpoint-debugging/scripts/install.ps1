@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$skillName = 'bp-skill'
+$skillName = 'breakpoint-debugging'
 $packageRoot = Split-Path -Parent $PSScriptRoot
 
 while (-not $Scope) {

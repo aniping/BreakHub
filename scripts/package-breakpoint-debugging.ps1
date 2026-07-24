@@ -7,15 +7,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$skillName = 'bp-skill'
-$skillSource = Join-Path $repoRoot $skillName
+$skillName = 'breakpoint-debugging'
+$skillSource = Join-Path $repoRoot 'skills\breakpoint-debugging'
 $runtimeSource = Join-Path $repoRoot 'bp-mcp'
 $buildRoot = Join-Path $repoRoot 'build'
-$stageRoot = Join-Path $buildRoot 'bp-skill-package'
+$stageRoot = Join-Path $buildRoot 'breakpoint-debugging-package'
 $stagedSkill = Join-Path $stageRoot $skillName
 $mcpBuildOutput = Join-Path $runtimeSource 'dist\breakhub-mcp.exe'
 $buildScript = Join-Path $runtimeSource 'scripts\build-exe.ps1'
-$installerScript = Join-Path $PSScriptRoot 'install-bp-skill.ps1'
+$installerScript = Join-Path $PSScriptRoot 'install-breakpoint-debugging.ps1'
+$installerName = 'install-breakpoint-debugging.ps1'
 
 if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot "dist\$skillName.zip"
@@ -41,7 +42,7 @@ if (Test-Path -LiteralPath $resolvedStageRoot) {
     Remove-Item -LiteralPath $resolvedStageRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $resolvedStageRoot -Force | Out-Null
-Copy-Item -LiteralPath $skillSource -Destination $resolvedStageRoot -Recurse -Force
+Copy-Item -LiteralPath $skillSource -Destination $stagedSkill -Recurse -Force
 
 $stagedMcp = Join-Path $stagedSkill 'scripts\mcp'
 New-Item -ItemType Directory -Path $stagedMcp -Force | Out-Null
@@ -76,6 +77,9 @@ if (Test-Path -LiteralPath $resolvedOutput) {
     Remove-Item -LiteralPath $resolvedOutput -Force
 }
 Compress-Archive -LiteralPath $stagedSkill -DestinationPath $resolvedOutput -CompressionLevel Optimal
-Copy-Item -LiteralPath $installerScript -Destination $outputDirectory -Force
+Copy-Item `
+    -LiteralPath $installerScript `
+    -Destination (Join-Path $outputDirectory $installerName) `
+    -Force
 Write-Host "Packaged $resolvedOutput"
-Write-Host "Simple installer: $(Join-Path $outputDirectory 'install-bp-skill.ps1')"
+Write-Host "Simple installer: $(Join-Path $outputDirectory $installerName)"

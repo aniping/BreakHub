@@ -16,7 +16,14 @@ function Clear-ReleaseArtifacts {
         throw "Refusing to clean a release directory outside the repository: $resolvedOutputRoot"
     }
 
-    @('breakhub*.jar', 'bp-probe*.jar', 'bp-skill.zip', 'install-bp-skill.ps1') |
+    @(
+        'breakhub*.jar',
+        'bp-probe*.jar',
+        'bp-skill.zip',
+        'install-bp-skill.ps1',
+        'breakpoint-debugging.zip',
+        'install-breakpoint-debugging.ps1'
+    ) |
         ForEach-Object {
             Get-ChildItem -LiteralPath $resolvedOutputRoot -Filter $_ -File -ErrorAction SilentlyContinue |
                 Remove-Item -Force
@@ -44,7 +51,7 @@ Clear-ReleaseArtifacts
 Copy-MavenArtifact -ModulePath (Join-Path $repoRoot 'bp-hub')
 Copy-MavenArtifact -ModulePath (Join-Path $repoRoot 'bp-probe\java')
 
-& (Join-Path $PSScriptRoot 'package-bp-skill.ps1') -Python $Python -SkipMcpBuild
+& (Join-Path $PSScriptRoot 'package-breakpoint-debugging.ps1') -Python $Python -SkipMcpBuild
 if ($LASTEXITCODE -ne 0) { throw 'Skill packaging failed.' }
 
 Write-Host "Release artifacts: $outputRoot"

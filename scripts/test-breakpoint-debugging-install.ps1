@@ -8,15 +8,15 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'build'))
 if (-not $PackagePath) {
-    $PackagePath = Join-Path $repoRoot 'dist\bp-skill.zip'
+    $PackagePath = Join-Path $repoRoot 'dist\breakpoint-debugging.zip'
 }
 if (-not $InstallerPath) {
-    $InstallerPath = Join-Path $repoRoot 'dist\install-bp-skill.ps1'
+    $InstallerPath = Join-Path $repoRoot 'dist\install-breakpoint-debugging.ps1'
 }
 $resolvedPackage = [IO.Path]::GetFullPath($PackagePath)
 $resolvedInstaller = [IO.Path]::GetFullPath($InstallerPath)
 $testRoot = [IO.Path]::GetFullPath(
-    (Join-Path $buildRoot ('bp-skill-install-test-' + [Guid]::NewGuid().ToString('N')))
+    (Join-Path $buildRoot ('breakpoint-debugging-install-test-' + [Guid]::NewGuid().ToString('N')))
 )
 if (-not $testRoot.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing to use a test directory outside the build root: $testRoot"
@@ -27,7 +27,7 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $testRoot '.git'),$releaseRoot -Force |
         Out-Null
     Copy-Item -LiteralPath $resolvedPackage,$resolvedInstaller -Destination $releaseRoot
-    $testInstaller = Join-Path $releaseRoot 'install-bp-skill.ps1'
+    $testInstaller = Join-Path $releaseRoot 'install-breakpoint-debugging.ps1'
 
     Push-Location $releaseRoot
     try {
@@ -45,6 +45,15 @@ try {
         throw 'Installer did not create the project OpenCode configuration.'
     }
     $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    $skillPermission = $config.permission.skill.PSObject.Properties['breakpoint-debugging']
+    if ($null -eq $skillPermission -or $skillPermission.Value -ne 'allow') {
+        throw 'Installer did not allow the breakpoint-debugging Skill.'
+    }
+    $installedSkill = Join-Path $testRoot '.opencode\skills\breakpoint-debugging'
+    $skillMetadata = Get-Content -LiteralPath (Join-Path $installedSkill 'SKILL.md') -Raw
+    if ($skillMetadata -notmatch '(?m)^name: breakpoint-debugging\s*$') {
+        throw 'Installed Skill metadata does not declare name: breakpoint-debugging.'
+    }
     $commandPath = $config.mcp.microbreakpoint.command[0]
     if (-not (Test-Path -LiteralPath $commandPath -PathType Leaf)) {
         throw 'OpenCode configuration does not point to the installed MCP executable.'
@@ -62,7 +71,6 @@ try {
         throw "OpenCode did not connect to the installed MCP server: $plainStatus"
     }
 
-    $installedSkill = Join-Path $testRoot '.opencode\skills\bp-skill'
     $uninstaller = Join-Path $installedSkill 'scripts\uninstall.ps1'
     & $uninstaller -Scope Project -ProjectRoot $testRoot -Confirm:$false
     if (Test-Path -LiteralPath $installedSkill) {
@@ -72,13 +80,13 @@ try {
     if ($null -ne $updatedConfig.mcp.PSObject.Properties['microbreakpoint']) {
         throw 'Uninstaller did not remove the OpenCode MCP registration.'
     }
-    if ($null -ne $updatedConfig.permission.skill.PSObject.Properties['bp-skill']) {
+    if ($null -ne $updatedConfig.permission.skill.PSObject.Properties['breakpoint-debugging']) {
         throw 'Uninstaller did not remove the OpenCode Skill permission.'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $testRoot '.opencode\breakhub'))) {
         throw 'Uninstaller removed mutable MCP data without explicit permission.'
     }
-    Write-Output 'BreakHub Skill install/uninstall integration test: passed'
+    Write-Output 'Breakpoint Debugging Skill install/uninstall integration test: passed'
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {

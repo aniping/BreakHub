@@ -1,4 +1,0 @@
-interface:
-  display_name: "BreakHub Debugging"
-  short_description: "Install and operate BreakHub debugging tools"
-  default_prompt: "Use $bp-skill to install BreakHub or safely debug paused calls."

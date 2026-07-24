@@ -300,12 +300,12 @@ def test_create_breakpoint_forwards_conditions_and_projects_discard_metadata(mon
 
 
 def test_agent_workflow_treats_reference_evidence_as_non_blocking() -> None:
-    skill = (REPOSITORY_ROOT / "bp-skill/SKILL.md").read_text(
+    skill = (REPOSITORY_ROOT / "skills/breakpoint-debugging/SKILL.md").read_text(
         encoding="utf-8"
     )
     reference = (
         REPOSITORY_ROOT
-        / "bp-skill/references/tool-reference.md"
+        / "skills/breakpoint-debugging/references/tool-reference.md"
     ).read_text(encoding="utf-8")
 
     for document in (skill, reference):
