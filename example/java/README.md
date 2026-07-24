@@ -4,6 +4,15 @@
 
 ## 构建与启动
 
+从仓库根目录生成测试辅助包：
+
+```powershell
+pwsh -File .\scripts\package-java-demo.ps1
+java -jar .\dist\instrument-demo-0.1.0.jar
+```
+
+也可以在 Demo 模块内直接构建：
+
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
 $env:Path = "$env:JAVA_HOME\bin;$env:Path"

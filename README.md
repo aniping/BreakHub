@@ -36,9 +36,12 @@ python -m pip install -e .\bp-mcp --no-deps
 pwsh -File .\scripts\build.ps1 -Python 'python'
 pwsh -File .\scripts\test.ps1 -Python 'python'
 pwsh -File .\scripts\package.ps1 -Python 'python'
+pwsh -File .\scripts\package-java-demo.ps1
 ```
 
 `package.ps1` 生成三个独立发布物：Hub JAR、Java Probe JAR 和 `breakpoint-debugging.zip`。Skill ZIP 内含 `breakhub-mcp.exe`；`example/java` 不进入发布目录。
+
+`package-java-demo.ps1` 独立编译 Probe、测试 Java Demo，并生成测试辅助包 `dist/instrument-demo-0.1.0.jar`；该 Demo 不属于正式发布物。
 
 ## 安装 Skill
 
