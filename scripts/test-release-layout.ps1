@@ -63,8 +63,15 @@ if ($unexpectedSkillScripts.Count -ne 0) {
 
 $probeReadmeText = Get-Content -LiteralPath $probeReadme -Raw
 if ($probeReadmeText -notmatch 'mvn install:install-file' -or
-    $probeReadmeText -notmatch '<artifactId>bp-probe</artifactId>') {
+    $probeReadmeText -notmatch '<artifactId>bp-probe</artifactId>' -or
+    $probeReadmeText -notmatch 'BreakHubProbe' -or
+    $probeReadmeText -notmatch 'handleLease') {
     throw 'Java Probe release manual is missing Maven installation instructions.'
+}
+if ($probeReadmeText -match 'ReportingLeaseManager' -or
+    $probeReadmeText -match 'DebugInvoker' -or
+    $probeReadmeText -match 'DebuggerSettings') {
+    throw 'Java Probe release manual still references the retired static or Spring-facing API.'
 }
 
 $configText = Get-Content -LiteralPath $hubConfig -Raw

@@ -4,13 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import java.time.Duration;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ExecutionException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -24,6 +20,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -31,14 +28,14 @@ import org.junit.jupiter.api.Test;
 class ReportingLeaseManagerTest {
 
     private ReportingLeaseManager manager;
+    private final ReportingChannel reportingChannel = new ReportingChannel();
 
     @AfterEach
     void tearDown() {
         if (manager != null) {
             manager.close();
         }
-        DebuggerSettings.enabled = false;
-        ReportingChannel.shared().deactivate();
+        reportingChannel.deactivate();
     }
 
     @Test
@@ -59,7 +56,7 @@ class ReportingLeaseManagerTest {
                 .containsEntry("lease_timeout_seconds", 30)
                 .containsEntry("reporting_status", "healthy")
                 .containsEntry("lease_id", "lease-1");
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
 
         assertError(manager.handle("{\"enabled\":true}"), 409,
                 "REPORTING_LEASE_ALREADY_ACTIVE");
@@ -85,7 +82,7 @@ class ReportingLeaseManagerTest {
                 .containsEntry("enabled", false)
                 .containsEntry("reporting_status", "idle")
                 .doesNotContainKey("lease_id");
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
         assertThat(cancellations).hasValue(1);
 
         ReportingLeaseManager.HttpResult repeatedStop = manager.handle(request(false, firstLeaseId));
@@ -130,7 +127,7 @@ class ReportingLeaseManagerTest {
             assertError(manager.handle(body), 400, "INVALID_REPORTING_LEASE_REQUEST");
         }
         assertError(manager.handle(null), 400, "INVALID_REPORTING_LEASE_REQUEST");
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
     }
 
     @Test
@@ -140,7 +137,7 @@ class ReportingLeaseManagerTest {
         manager.handle("{\"enabled\":true}");
 
         assertTrue(cancellation.await(2, TimeUnit.SECONDS));
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
 
         ReportingLeaseManager.HttpResult repeatedStop = manager.handle(
                 request(false, "expiring-lease"));
@@ -154,14 +151,14 @@ class ReportingLeaseManagerTest {
         ScheduledThreadPoolExecutor scheduler = scheduler();
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler,
                 () -> "renewed-lease", () -> {
-                }, System::nanoTime);
+                }, System::nanoTime, reportingChannel);
         manager.handle("{\"enabled\":true}");
 
         assertThat(scheduler.getQueue()).hasSize(1);
         manager.handle(request(true, "renewed-lease"));
 
         assertThat(scheduler.getQueue()).hasSize(1);
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
     }
 
     @Test
@@ -169,7 +166,8 @@ class ReportingLeaseManagerTest {
         AtomicLong now = new AtomicLong();
         AtomicInteger cancellations = new AtomicInteger();
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler(),
-                () -> "expired-lease", cancellations::incrementAndGet, now::get);
+                () -> "expired-lease", cancellations::incrementAndGet, now::get,
+                reportingChannel);
         manager.handle("{\"enabled\":true}");
 
         now.set(Duration.ofSeconds(10).toNanos());
@@ -178,7 +176,7 @@ class ReportingLeaseManagerTest {
         now.set(Duration.ofSeconds(40).toNanos() - 1);
         assertError(manager.handle(request(true, "wrong")), 409,
                 "REPORTING_LEASE_CONFLICT");
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
         assertThat(cancellations).hasValue(0);
 
         now.set(Duration.ofSeconds(40).toNanos());
@@ -186,7 +184,7 @@ class ReportingLeaseManagerTest {
                 request(true, "expired-lease"));
 
         assertError(result, 404, "REPORTING_LEASE_NOT_FOUND");
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
         assertThat(cancellations).hasValue(1);
     }
 
@@ -195,7 +193,7 @@ class ReportingLeaseManagerTest {
         manager = manager(Duration.ofSeconds(5), () -> "internal-lease-id", () -> {
         });
         manager.handle("{\"enabled\":true}");
-        ReportingChannel channel = ReportingChannel.shared();
+        ReportingChannel channel = reportingChannel;
         ReportingChannel.Permit request = channel.tryAcquire();
         channel.failed(request, "before_request_failed");
 
@@ -261,7 +259,7 @@ class ReportingLeaseManagerTest {
             assertThat(start.get(2, TimeUnit.SECONDS).body())
                     .containsEntry("result", "created")
                     .containsEntry("lease_id", "lease-2");
-            assertTrue(DebuggerSettings.enabled);
+            assertTrue(reportingChannel.isActive());
         } finally {
             allowCancellationToFinish.countDown();
             operations.shutdownNow();
@@ -278,7 +276,7 @@ class ReportingLeaseManagerTest {
         ReportingLeaseManager.HttpResult result = manager.handle("{\"enabled\":true}");
 
         assertThat(result.statusCode()).isNotEqualTo(200);
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
     }
 
     @Test
@@ -292,7 +290,7 @@ class ReportingLeaseManagerTest {
         manager.close();
 
         assertThat(cancellations).hasValue(1);
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
     }
 
     @Test
@@ -300,7 +298,8 @@ class ReportingLeaseManagerTest {
         AtomicInteger cancellations = new AtomicInteger();
         AtomicLong now = new AtomicLong();
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler(),
-                () -> "competing-lease", cancellations::incrementAndGet, now::get);
+                () -> "competing-lease", cancellations::incrementAndGet, now::get,
+                reportingChannel);
         manager.handle("{\"enabled\":true}");
         now.set(Duration.ofSeconds(30).toNanos());
         CountDownLatch start = new CountDownLatch(1);
@@ -328,7 +327,7 @@ class ReportingLeaseManagerTest {
         }
 
         assertThat(cancellations).hasValue(1);
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
         assertThat(manager.handle("{\"enabled\":true}").statusCode()).isNotEqualTo(200);
     }
 
@@ -337,15 +336,10 @@ class ReportingLeaseManagerTest {
         AtomicLong now = new AtomicLong();
         AtomicInteger cancellations = new AtomicInteger();
         CopyOnWriteArrayList<Runnable> expirationCommands = new CopyOnWriteArrayList<>();
-        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
-        when(scheduler.schedule(any(Runnable.class), anyLong(), eq(TimeUnit.NANOSECONDS)))
-                .thenAnswer(invocation -> {
-                    expirationCommands.add(invocation.getArgument(0));
-                    return mock(ScheduledFuture.class);
-                });
-        when(scheduler.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
+        ScheduledExecutorService scheduler = new RecordingScheduler(expirationCommands);
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler,
-                () -> "renewed-generation", cancellations::incrementAndGet, now::get);
+                () -> "renewed-generation", cancellations::incrementAndGet, now::get,
+                reportingChannel);
         manager.handle("{\"enabled\":true}");
         Runnable oldExpiration = expirationCommands.get(0);
 
@@ -354,13 +348,13 @@ class ReportingLeaseManagerTest {
         Runnable currentExpiration = expirationCommands.get(1);
         oldExpiration.run();
 
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
         assertThat(cancellations).hasValue(0);
 
         now.set(Duration.ofSeconds(40).toNanos());
         currentExpiration.run();
 
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
         assertThat(cancellations).hasValue(1);
     }
 
@@ -369,7 +363,7 @@ class ReportingLeaseManagerTest {
         ScheduledThreadPoolExecutor scheduler = scheduler();
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler,
                 () -> "closing-scheduler", () -> {
-                }, System::nanoTime);
+                }, System::nanoTime, reportingChannel);
         manager.handle("{\"enabled\":true}");
 
         manager.close();
@@ -384,15 +378,10 @@ class ReportingLeaseManagerTest {
         AtomicInteger ids = new AtomicInteger();
         AtomicInteger cancellations = new AtomicInteger();
         CopyOnWriteArrayList<Runnable> expirationCommands = new CopyOnWriteArrayList<>();
-        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
-        when(scheduler.schedule(any(Runnable.class), anyLong(), eq(TimeUnit.NANOSECONDS)))
-                .thenAnswer(invocation -> {
-                    expirationCommands.add(invocation.getArgument(0));
-                    return mock(ScheduledFuture.class);
-                });
-        when(scheduler.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
+        ScheduledExecutorService scheduler = new RecordingScheduler(expirationCommands);
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler,
-                () -> "lease-" + ids.incrementAndGet(), cancellations::incrementAndGet, now::get);
+                () -> "lease-" + ids.incrementAndGet(), cancellations::incrementAndGet, now::get,
+                reportingChannel);
 
         String oldLeaseId = (String) manager.handle("{\"enabled\":true}").body().get("lease_id");
         Runnable oldExpiration = expirationCommands.get(0);
@@ -407,7 +396,7 @@ class ReportingLeaseManagerTest {
         now.set(Duration.ofSeconds(30).toNanos());
         oldExpiration.run();
 
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
         assertThat(cancellations).hasValue(1);
         assertThat(expirationCommands).hasSize(2);
         assertThat(manager.handle(request(true, currentLeaseId)).body())
@@ -420,21 +409,16 @@ class ReportingLeaseManagerTest {
         AtomicLong now = new AtomicLong();
         AtomicInteger cancellations = new AtomicInteger();
         CopyOnWriteArrayList<Runnable> expirationCommands = new CopyOnWriteArrayList<>();
-        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
-        when(scheduler.schedule(any(Runnable.class), anyLong(), eq(TimeUnit.NANOSECONDS)))
-                .thenAnswer(invocation -> {
-                    expirationCommands.add(invocation.getArgument(0));
-                    return mock(ScheduledFuture.class);
-                });
-        when(scheduler.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
+        ScheduledExecutorService scheduler = new RecordingScheduler(expirationCommands);
         manager = new ReportingLeaseManager(Duration.ofSeconds(30), scheduler,
-                () -> "unobserved-lease", cancellations::incrementAndGet, now::get);
+                () -> "unobserved-lease", cancellations::incrementAndGet, now::get,
+                reportingChannel);
 
         manager.handle("{\"enabled\":true}");
         now.set(Duration.ofSeconds(30).toNanos());
         expirationCommands.get(0).run();
 
-        assertFalse(DebuggerSettings.enabled);
+        assertFalse(reportingChannel.isActive());
         assertThat(cancellations).hasValue(1);
         assertError(manager.handle(request(true, "unobserved-lease")), 404,
                 "REPORTING_LEASE_NOT_FOUND");
@@ -458,7 +442,13 @@ class ReportingLeaseManagerTest {
 
     private ReportingLeaseManager manager(Duration timeout, java.util.function.Supplier<String> ids,
             Runnable cancelRequests) {
-        return new ReportingLeaseManager(timeout, scheduler(), ids, cancelRequests, System::nanoTime);
+        return new ReportingLeaseManager(
+                timeout,
+                scheduler(),
+                ids,
+                cancelRequests,
+                System::nanoTime,
+                reportingChannel);
     }
 
     private ScheduledThreadPoolExecutor scheduler() {
@@ -485,6 +475,63 @@ class ReportingLeaseManagerTest {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(interrupted);
+        }
+    }
+
+    private static final class RecordingScheduler extends ScheduledThreadPoolExecutor {
+
+        private final List<Runnable> commands;
+
+        private RecordingScheduler(List<Runnable> commands) {
+            super(1);
+            this.commands = commands;
+        }
+
+        @Override
+        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            commands.add(command);
+            return new RecordedFuture();
+        }
+    }
+
+    private static final class RecordedFuture implements ScheduledFuture<Object> {
+
+        private final AtomicBoolean cancelled = new AtomicBoolean();
+
+        @Override
+        public long getDelay(TimeUnit unit) {
+            return 0;
+        }
+
+        @Override
+        public int compareTo(Delayed other) {
+            return 0;
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return cancelled.compareAndSet(false, true);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return cancelled.get();
+        }
+
+        @Override
+        public boolean isDone() {
+            return cancelled.get();
+        }
+
+        @Override
+        public Object get() throws InterruptedException, ExecutionException {
+            return null;
+        }
+
+        @Override
+        public Object get(long timeout, TimeUnit unit)
+                throws InterruptedException, ExecutionException, TimeoutException {
+            return null;
         }
     }
 }

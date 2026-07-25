@@ -2,11 +2,10 @@ package com.example.instrumentdemo.controller;
 
 import com.example.instrumentdemo.controller.dto.ControlParams;
 import com.example.instrumentdemo.controller.dto.InitParams;
-import com.ateagents.breakhub.probe.ReportingLeaseManager;
+import com.ateagents.breakhub.probe.BreakHubProbe;
+import com.ateagents.breakhub.probe.LeaseResult;
 import com.example.instrumentdemo.model.ValueResult;
 import com.example.instrumentdemo.service.InstrumentService;
-
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,12 +17,12 @@ import org.springframework.web.bind.annotation.*;
 public class InstrumentController {
     private static final Logger log = LoggerFactory.getLogger(InstrumentController.class);
     private final InstrumentService instrumentService;
-    private final ReportingLeaseManager reportingLeaseManager;
+    private final BreakHubProbe probe;
 
     public InstrumentController(InstrumentService instrumentService,
-            ReportingLeaseManager reportingLeaseManager) {
+            BreakHubProbe probe) {
         this.instrumentService = instrumentService;
-        this.reportingLeaseManager = reportingLeaseManager;
+        this.probe = probe;
     }
 
     @GetMapping("/ping")
@@ -32,10 +31,12 @@ public class InstrumentController {
     }
 
     @PostMapping("/debugger/enabled")
-    public ResponseEntity<Map<String, Object>> setDebuggerEnabled(
+    public ResponseEntity<String> setDebuggerEnabled(
             @RequestBody(required = false) String body) {
-        ReportingLeaseManager.HttpResult result = reportingLeaseManager.handle(body);
-        return ResponseEntity.status(result.statusCode()).body(result.body());
+        LeaseResult result = probe.handleLease(body);
+        return ResponseEntity.status(result.statusCode())
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(result.responseBody());
     }
 
     @PostMapping("/initialize")

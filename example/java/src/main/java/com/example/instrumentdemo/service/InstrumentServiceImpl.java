@@ -3,18 +3,29 @@ package com.example.instrumentdemo.service;
 import com.example.instrumentdemo.annotation.Description;
 import com.example.instrumentdemo.annotation.EntryDefine;
 import com.example.instrumentdemo.annotation.ParameterDefine;
-import com.ateagents.breakhub.probe.DebugInvoker;
+import com.ateagents.breakhub.probe.BreakHubProbe;
 import com.ateagents.breakhub.probe.DebugMethodInfo;
-import com.ateagents.breakhub.probe.DebuggerSettings;
 import com.example.instrumentdemo.model.ValueResult;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class InstrumentServiceImpl implements InstrumentService {
+
+    private final BreakHubProbe probe;
+    private final String serviceName;
+
+    public InstrumentServiceImpl(
+            BreakHubProbe probe,
+            @Value("${debugger.service-name:instrument-service}") String serviceName) {
+        this.probe = probe;
+        this.serviceName = serviceName;
+    }
+
     @Override
     @EntryDefine("仪表初始化")
     @Description("初始化指定类型和编号的仪表")
@@ -22,7 +33,7 @@ public class InstrumentServiceImpl implements InstrumentService {
             @ParameterDefine("仪表类型") @Description("仪表类型") String instType,
             @ParameterDefine("仪表编号") @Description("仪表编号") int slotId,
             @ParameterDefine("参数") @Description("扩展参数") Map<String, Object> params) {
-        return DebugInvoker.invoke(
+        return probe.invoke(
                 debugMethodInfo(
                         instType, "INIT", "instrumentInitialize", slotId, params),
                 () -> {
@@ -41,7 +52,7 @@ public class InstrumentServiceImpl implements InstrumentService {
             @ParameterDefine("仪表操作") @Description("仪表操作") String cmdName,
             @ParameterDefine("槽位id") @Description("槽位id") int slotId,
             @ParameterDefine("参数") @Description("扩展参数") Map<String, Object> params) {
-        return DebugInvoker.invoke(
+        return probe.invoke(
                 debugMethodInfo(instType, cmdName, "instrumentControl", slotId, params),
                 () -> {
                     // 这里先放原来的真实业务逻辑
@@ -74,7 +85,7 @@ public class InstrumentServiceImpl implements InstrumentService {
                 .cmdName(command)
                 .description(methodName)
                 .params(params)
-                .serviceName(DebuggerSettings.serviceName)
+                .serviceName(serviceName)
                 .className("InstrumentService")
                 .methodName(methodName)
                 .arg("params", params)

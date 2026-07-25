@@ -21,24 +21,31 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
-public class DebugClient {
+final class DebugClient {
 
     private static final int MAX_ORDINARY_REQUEST_TIMEOUT_MS = 5000;
     private static final int MAX_CONNECT_TIMEOUT_MS = 5000;
     private static final int DEFAULT_BREAKPOINT_TIMEOUT_MS = 300000;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final Object CLIENT_MUTEX = new Object();
-    private static final Set<ActiveRequest> ACTIVE_REQUESTS = ConcurrentHashMap.newKeySet();
-    private static final ReportingChannel REPORTING_CHANNEL = ReportingChannel.shared();
 
-    private static volatile ClientHolder sharedClient;
+    private final Object clientMutex = new Object();
+    private final Set<ActiveRequest> activeRequests = ConcurrentHashMap.newKeySet();
+    private final ProbeConfig config;
+    private final ReportingChannel reportingChannel;
 
-    public static WaitResponse waitContinue(String interactionId) {
+    private volatile ClientHolder sharedClient;
+
+    DebugClient(ProbeConfig config, ReportingChannel reportingChannel) {
+        this.config = Objects.requireNonNull(config, "config");
+        this.reportingChannel = Objects.requireNonNull(reportingChannel, "reportingChannel");
+    }
+
+    WaitResponse waitContinue(String interactionId) {
         return waitContinue(interactionId, "before");
     }
 
-    public static WaitResponse waitContinue(String interactionId, String pausePoint) {
-        String url = DebuggerSettings.serverUrl + "/api/business/interactions/wait";
+    WaitResponse waitContinue(String interactionId, String pausePoint) {
+        String url = config.hubUrl() + "/api/business/interactions/wait";
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("interaction_id", interactionId);
         body.put("pause_point", pausePoint);
@@ -49,7 +56,7 @@ public class DebugClient {
                         url,
                         body,
                         positiveTimeout(
-                                DebuggerSettings.breakpointTimeoutMs,
+                                config.breakpointTimeoutMs(),
                                 DEFAULT_BREAKPOINT_TIMEOUT_MS),
                         permit);
                 if (responseBody.isEmpty()) {
@@ -70,8 +77,8 @@ public class DebugClient {
         }
     }
 
-    public static BeforeCallResponse beforeCall(BeforeCallRequest request) {
-        String url = DebuggerSettings.serverUrl + "/api/business/interactions/before";
+    BeforeCallResponse beforeCall(BeforeCallRequest request) {
+        String url = config.hubUrl() + "/api/business/interactions/before";
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("interaction_id", request.getCallId());
         body.put("object", request.getObjectName());
@@ -102,8 +109,8 @@ public class DebugClient {
         }
     }
 
-    public static AfterCallResponse afterCall(AfterCallRequest request) {
-        String url = DebuggerSettings.serverUrl + "/api/business/interactions/after";
+    AfterCallResponse afterCall(AfterCallRequest request) {
+        String url = config.hubUrl() + "/api/business/interactions/after";
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("interaction_id", request.getCallId());
         body.put("result", request.getResult());
@@ -127,49 +134,49 @@ public class DebugClient {
         }
     }
 
-    private static BeforeCallResponse failOpenBeforeResponse(String reason) {
+    private BeforeCallResponse failOpenBeforeResponse(String reason) {
         return new BeforeCallResponse(false, null, "continue", reason, null, null, null, null);
     }
 
-    private static int ordinaryRequestTimeoutMs() {
-        int configured = DebuggerSettings.readTimeoutMs;
+    private int ordinaryRequestTimeoutMs() {
+        int configured = config.readTimeoutMs();
         if (configured <= 0 || configured > MAX_ORDINARY_REQUEST_TIMEOUT_MS) {
             return MAX_ORDINARY_REQUEST_TIMEOUT_MS;
         }
         return configured;
     }
 
-    private static int positiveTimeout(int configured, int fallback) {
+    private int positiveTimeout(int configured, int fallback) {
         return configured > 0 ? configured : fallback;
     }
 
-    private static <T> T executeReporting(
+    private <T> T executeReporting(
             String failureSummary,
             ReportingOperation<T> operation) throws Exception {
-        ReportingChannel.Permit permit = REPORTING_CHANNEL.tryAcquire();
+        ReportingChannel.Permit permit = reportingChannel.tryAcquire();
         if (!permit.allowed()) {
             throw new ReportingSuppressedException();
         }
         try {
             T result = operation.execute(permit);
-            if (!REPORTING_CHANNEL.succeeded(permit)) {
+            if (!reportingChannel.succeeded(permit)) {
                 throw new ReportingSuppressedException();
             }
             return result;
         } catch (ReportingSuppressedException suppressed) {
             throw suppressed;
         } catch (Exception error) {
-            REPORTING_CHANNEL.failed(permit, failureSummary);
+            reportingChannel.failed(permit, failureSummary);
             throw error;
         }
     }
 
-    private static String postJson(
+    private String postJson(
             String url,
             Object body,
             int requestTimeoutMs,
             ReportingChannel.Permit permit) throws Exception {
-        String token = DebuggerSettings.businessClientToken;
+        String token = config.businessClientToken();
         if (token == null || token.isBlank()) {
             throw new IllegalStateException("Business client token is not configured");
         }
@@ -215,12 +222,12 @@ public class DebugClient {
             }
             throw new IllegalStateException("HTTP request failed");
         } finally {
-            ACTIVE_REQUESTS.remove(activeRequest);
+            activeRequests.remove(activeRequest);
         }
     }
 
-    private static HttpClient sharedClient() {
-        int configured = DebuggerSettings.connectTimeoutMs;
+    private HttpClient sharedClient() {
+        int configured = config.connectTimeoutMs();
         int connectTimeoutMs = configured > 0
                 ? Math.min(configured, MAX_CONNECT_TIMEOUT_MS)
                 : MAX_CONNECT_TIMEOUT_MS;
@@ -229,7 +236,7 @@ public class DebugClient {
             return current.client();
         }
 
-        synchronized (CLIENT_MUTEX) {
+        synchronized (clientMutex) {
             current = sharedClient;
             if (current == null || current.connectTimeoutMs() != connectTimeoutMs) {
                 current = new ClientHolder(
@@ -243,19 +250,19 @@ public class DebugClient {
         }
     }
 
-    public static void cancelActiveRequests() {
-        for (ActiveRequest request : ACTIVE_REQUESTS) {
-            if (ACTIVE_REQUESTS.remove(request)) {
+    void cancelActiveRequests() {
+        for (ActiveRequest request : activeRequests) {
+            if (activeRequests.remove(request)) {
                 request.cancel(true);
             }
         }
     }
 
-    private static void register(ActiveRequest request, ReportingChannel.Permit permit)
+    private void register(ActiveRequest request, ReportingChannel.Permit permit)
             throws ReportingSuppressedException {
-        ACTIVE_REQUESTS.add(request);
-        if (!DebuggerSettings.enabled || !REPORTING_CHANNEL.canStart(permit)) {
-            ACTIVE_REQUESTS.remove(request);
+        activeRequests.add(request);
+        if (!reportingChannel.canStart(permit)) {
+            activeRequests.remove(request);
             request.cancel(true);
             throw new ReportingSuppressedException();
         }

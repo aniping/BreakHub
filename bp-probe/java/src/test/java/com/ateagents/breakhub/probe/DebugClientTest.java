@@ -35,20 +35,17 @@ class DebugClientTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private HttpServer server;
+    private ReportingChannel reportingChannel;
+    private DebugClient client;
 
     @AfterEach
     void tearDown() {
         if (server != null) {
             server.stop(0);
         }
-        DebugClient.cancelActiveRequests();
-        ReportingChannel.shared().deactivate();
-        DebuggerSettings.enabled = false;
-        DebuggerSettings.serverUrl = "http://127.0.0.1:18621";
-        DebuggerSettings.businessClientToken = "";
-        DebuggerSettings.connectTimeoutMs = 300;
-        DebuggerSettings.readTimeoutMs = 1000;
-        DebuggerSettings.breakpointTimeoutMs = 300000;
+        if (client != null) {
+            client.cancelActiveRequests();
+        }
     }
 
     @Test
@@ -60,19 +57,15 @@ class DebugClientTest {
         });
         server.start();
 
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 100;
-        DebuggerSettings.readTimeoutMs = 100;
+        configureClient(100, 100, 300000);
 
         BeforeCallRequest request = DebugInvoker.buildBeforeCallRequest("call-1",
                 TestDebugMethodInfos.commonMethodData("SA", "start", "instrumentControl", 1, Map.of()));
 
-        BeforeCallResponse response = DebugClient.beforeCall(request);
+        BeforeCallResponse response = client.beforeCall(request);
 
         assertThat(response.isSuccess()).isFalse();
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
     }
 
     @Test
@@ -108,24 +101,21 @@ class DebugClientTest {
         });
         server.start();
 
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 100;
-        DebuggerSettings.readTimeoutMs = 1000;
+        configureClient(100, 1000, 300000);
         ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
         scheduler.setRemoveOnCancelPolicy(true);
         ReportingLeaseManager lease = new ReportingLeaseManager(
                 Duration.ofMinutes(1), scheduler, () -> "probe-lease",
-                DebugClient::cancelActiveRequests, System::nanoTime);
+                client::cancelActiveRequests, System::nanoTime, reportingChannel);
         String leaseId = (String) lease.handle("{\"enabled\":true}").body().get("lease_id");
         BeforeCallRequest request = DebugInvoker.buildBeforeCallRequest("first-failure",
                 TestDebugMethodInfos.commonMethodData("SA", "start", "instrumentControl", 1, Map.of()));
 
-        assertThat(DebugClient.beforeCall(request).isSuccess()).isFalse();
-        assertThat(DebuggerSettings.enabled).isTrue();
+        assertThat(client.beforeCall(request).isSuccess()).isFalse();
+        assertThat(reportingChannel.isActive()).isTrue();
         assertThat(calls).hasValue(1);
         for (int index = 0; index < 5; index++) {
-            assertThat(DebugClient.beforeCall(request).isSuccess()).isFalse();
+            assertThat(client.beforeCall(request).isSuccess()).isFalse();
         }
         assertThat(calls).hasValue(1);
 
@@ -150,7 +140,7 @@ class DebugClientTest {
                     ready.countDown();
                     start.await();
                     try {
-                        return DebugClient.beforeCall(DebugInvoker.buildBeforeCallRequest(
+                        return client.beforeCall(DebugInvoker.buildBeforeCallRequest(
                                 "concurrent-" + requestNumber,
                                 TestDebugMethodInfos.commonMethodData(
                                         "SA", "start", "instrumentControl", 1, Map.of())));
@@ -170,15 +160,15 @@ class DebugClientTest {
                 assertThat(response.get(2, TimeUnit.SECONDS).isSuccess()).isFalse();
             }
             assertThat(calls).hasValue(2);
-            assertThat(DebugClient.beforeCall(request).isSuccess()).isFalse();
+            assertThat(client.beforeCall(request).isSuccess()).isFalse();
             assertThat(calls).hasValue(2);
 
             lease.handle("{\"enabled\":true,\"lease_id\":\"" + leaseId + "\"}");
-            assertThat(DebugClient.beforeCall(DebugInvoker.buildBeforeCallRequest(
+            assertThat(client.beforeCall(DebugInvoker.buildBeforeCallRequest(
                     "successful-probe",
                     TestDebugMethodInfos.commonMethodData(
                             "SA", "start", "instrumentControl", 1, Map.of()))).isSuccess()).isTrue();
-            assertThat(DebugClient.beforeCall(DebugInvoker.buildBeforeCallRequest(
+            assertThat(client.beforeCall(DebugInvoker.buildBeforeCallRequest(
                     "healthy-request",
                     TestDebugMethodInfos.commonMethodData(
                             "SA", "start", "instrumentControl", 1, Map.of()))).isSuccess()).isTrue();
@@ -214,15 +204,13 @@ class DebugClientTest {
         });
         server.start();
 
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
+        configureClient(300, 1000, 300000);
         BeforeCallRequest request = DebugInvoker.buildBeforeCallRequest("call-1",
                 TestDebugMethodInfos.commonMethodData(
                         "SA", "start", "instrumentControl", 1,
                         Map.of("mode", "AUTO")));
 
-        DebugClient.beforeCall(request);
+        client.beforeCall(request);
 
         assertThat(method).hasValue("POST");
         assertThat(authorization).hasValue("Bearer business-token");
@@ -251,14 +239,12 @@ class DebugClientTest {
         });
         server.start();
 
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
+        configureClient(300, 1000, 300000);
         AfterCallRequest request = new AfterCallRequest();
         request.setCallId("call-1");
         request.setResult(Map.of("code", 0, "message", "ok"));
 
-        DebugClient.afterCall(request);
+        client.afterCall(request);
 
         assertThat(method).hasValue("POST");
         assertThat(authorization).hasValue("Bearer business-token");
@@ -313,23 +299,19 @@ class DebugClientTest {
         });
         server.start();
 
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 0;
-        DebuggerSettings.readTimeoutMs = 200;
+        configureClient(0, 200, 300000);
         BeforeCallRequest request = DebugInvoker.buildBeforeCallRequest("call-1",
                 TestDebugMethodInfos.commonMethodData(
                         "SA", "start", "instrumentControl", 1,
                         Map.of("mode", "AUTO")));
 
         long startedAt = System.nanoTime();
-        BeforeCallResponse response = DebugClient.beforeCall(request);
+        BeforeCallResponse response = client.beforeCall(request);
         long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
 
         assertThat(response.isSuccess()).isFalse();
         assertThat(elapsedMs).isLessThan(1000);
-        assertTrue(DebuggerSettings.enabled);
+        assertTrue(reportingChannel.isActive());
     }
 
     @Test
@@ -370,18 +352,14 @@ class DebugClientTest {
         });
         server.start();
 
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 100;
-        DebuggerSettings.breakpointTimeoutMs = 10000;
+        configureClient(100, 1000, 10000);
 
         ExecutorService clientExecutor = Executors.newSingleThreadExecutor();
         try {
-            Future<WaitResponse> response = clientExecutor.submit(() -> DebugClient.waitContinue("call-1"));
+            Future<WaitResponse> response = clientExecutor.submit(() -> client.waitContinue("call-1"));
             assertTrue(requestStarted.await(2, TimeUnit.SECONDS));
 
-            DebugClient.cancelActiveRequests();
+            client.cancelActiveRequests();
 
             assertThat(response.get(2, TimeUnit.SECONDS)).isNotNull();
             assertThat(method).hasValue("POST");
@@ -403,8 +381,18 @@ class DebugClientTest {
         exchange.close();
     }
 
-    private static void enableReporting() {
-        DebuggerSettings.enabled = true;
-        ReportingChannel.shared().activate();
+    private void configureClient(
+            int connectTimeoutMs,
+            int readTimeoutMs,
+            int breakpointTimeoutMs) {
+        reportingChannel = new ReportingChannel();
+        reportingChannel.activate();
+        ProbeConfig config = new ProbeConfig(
+                "http://127.0.0.1:" + server.getAddress().getPort(),
+                "business-token",
+                connectTimeoutMs,
+                readTimeoutMs,
+                breakpointTimeoutMs);
+        client = new DebugClient(config, reportingChannel);
     }
 }

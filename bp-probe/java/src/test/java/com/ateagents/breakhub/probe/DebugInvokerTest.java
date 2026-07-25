@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -38,30 +40,23 @@ import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(OutputCaptureExtension.class)
 class DebugInvokerTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private HttpServer server;
+    private BreakHubProbe probe;
+    private String leaseId;
 
     @AfterEach
     void tearDown() {
         if (server != null) {
             server.stop(0);
         }
-        DebugClient.cancelActiveRequests();
-        ReportingChannel.shared().deactivate();
-        DebuggerSettings.enabled = false;
-        DebuggerSettings.serverUrl = "http://127.0.0.1:18621";
-        DebuggerSettings.businessClientToken = "";
-        DebuggerSettings.connectTimeoutMs = 300;
-        DebuggerSettings.readTimeoutMs = 1000;
-        DebuggerSettings.breakpointTimeoutMs = 300000;
+        if (probe != null) {
+            probe.close();
+        }
     }
 
     @Test
@@ -104,7 +99,7 @@ class DebugInvokerTest {
         params.put("tags", java.util.List.of(1, 2));
         AtomicReference<Map<String, Object>> callbackMap = new AtomicReference<>();
 
-        Map<String, Object> result = DebugInvoker.invoke(methodInfo(params), () -> {
+        Map<String, Object> result = probe.invoke(methodInfo(params), () -> {
             callbackMap.set(params);
             return params;
         });
@@ -131,7 +126,7 @@ class DebugInvokerTest {
         startDebuggerServer(false, "{}", beforeCalls, waitCalls);
         Map<String, Object> params = new LinkedHashMap<>(Map.of("mode", "AUTO"));
 
-        String result = DebugInvoker.invoke(methodInfo(params), () -> "executed");
+        String result = probe.invoke(methodInfo(params), () -> "executed");
 
         assertThat(result).isEqualTo("executed");
         assertThat(beforeCalls).hasValue(1);
@@ -145,7 +140,7 @@ class DebugInvokerTest {
                 """, new AtomicInteger(), new AtomicInteger());
         CountingMap params = new CountingMap(Map.of("mode", "AUTO"));
 
-        Map<String, Object> result = DebugInvoker.invoke(methodInfo(params), () -> params);
+        Map<String, Object> result = probe.invoke(methodInfo(params), () -> params);
 
         assertSame(params, result);
         assertThat(params).containsEntry("mode", "AUTO");
@@ -170,24 +165,32 @@ class DebugInvokerTest {
     }
 
     @Test
-    void immutableMapFailsOpenWithoutLeakingValuesOrDisablingLaterInjection(CapturedOutput output)
+    void immutableMapFailsOpenWithoutLeakingValuesOrDisablingLaterInjection()
             throws Exception {
         startDebuggerServer(true, """
                 {"mode":"MANUAL","secret":"injected-secret"}
                 """, new AtomicInteger(), new AtomicInteger());
         Map<String, Object> immutable = Map.of("mode", "AUTO", "secret", "original-secret");
 
-        Map<String, Object> immutableResult = DebugInvoker.invoke(methodInfo(immutable), () -> immutable);
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        Map<String, Object> immutableResult;
+        try {
+            System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+            immutableResult = probe.invoke(methodInfo(immutable), () -> immutable);
+        } finally {
+            System.setOut(originalOut);
+        }
 
         assertSame(immutable, immutableResult);
         assertThat(immutable).containsEntry("mode", "AUTO");
-        assertThat(DebuggerSettings.enabled).isTrue();
-        assertThat(output.getAll())
+        assertThat(reportingEnabled()).isTrue();
+        assertThat(captured.toString(StandardCharsets.UTF_8))
                 .doesNotContain("original-secret")
                 .doesNotContain("injected-secret");
 
         Map<String, Object> mutable = new LinkedHashMap<>(immutable);
-        Map<String, Object> mutableResult = DebugInvoker.invoke(methodInfo(mutable), () -> mutable);
+        Map<String, Object> mutableResult = probe.invoke(methodInfo(mutable), () -> mutable);
 
         assertSame(mutable, mutableResult);
         assertThat(mutable)
@@ -205,7 +208,7 @@ class DebugInvokerTest {
         FailingMap params = new FailingMap(firstOriginal, secondOriginal, false);
         AtomicBoolean callbackCalled = new AtomicBoolean();
 
-        Map<String, Object> result = DebugInvoker.invoke(methodInfo(params), () -> {
+        Map<String, Object> result = probe.invoke(methodInfo(params), () -> {
             callbackCalled.set(true);
             return params;
         });
@@ -224,7 +227,7 @@ class DebugInvokerTest {
         FailingMap params = new FailingMap("old-1", "old-2", true);
         AtomicBoolean callbackCalled = new AtomicBoolean();
 
-        assertThatThrownBy(() -> DebugInvoker.invoke(methodInfo(params), () -> {
+        assertThatThrownBy(() -> probe.invoke(methodInfo(params), () -> {
             callbackCalled.set(true);
             return params;
         }))
@@ -245,7 +248,7 @@ class DebugInvokerTest {
         originalData.put("mode", "AUTO");
         ValueResult original = ValueResult.success("original result", originalData);
 
-        ValueResult result = DebugInvoker.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
+        ValueResult result = probe.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
 
         assertThat(result).isNotSameAs(original);
         assertThat(result).isInstanceOf(ValueResult.class);
@@ -263,7 +266,7 @@ class DebugInvokerTest {
         startAfterDebuggerServer(false, "{}", afterCalls, waitCalls, new AtomicInteger());
         ValueResult original = ValueResult.success("original result");
 
-        ValueResult result = DebugInvoker.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
+        ValueResult result = probe.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
 
         assertSame(original, result);
         assertThat(afterCalls).hasValue(1);
@@ -279,7 +282,7 @@ class DebugInvokerTest {
                 """, afterCalls, waitCalls, new AtomicInteger());
         ValueResult original = ValueResult.success("original result");
 
-        ValueResult result = DebugInvoker.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
+        ValueResult result = probe.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
 
         assertSame(original, result);
         assertThat(afterCalls).hasValue(1);
@@ -303,16 +306,14 @@ class DebugInvokerTest {
             exchange.close();
         });
         server.start();
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
+        openProbe(200, 500, 2000);
         ValueResult original = ValueResult.success("original result");
 
-        ValueResult result = DebugInvoker.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
+        ValueResult result = probe.invoke(methodInfo(new LinkedHashMap<>()), () -> original);
 
         assertSame(original, result);
         assertThat(afterCalls).hasValue(1);
-        assertThat(DebuggerSettings.enabled).isTrue();
+        assertThat(reportingEnabled()).isTrue();
     }
 
     @Test
@@ -353,22 +354,17 @@ class DebugInvokerTest {
             }
         });
         server.start();
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 200;
-        DebuggerSettings.readTimeoutMs = 500;
-        DebuggerSettings.breakpointTimeoutMs = 10000;
+        openProbe(200, 500, 10000);
         ValueResult original = ValueResult.success("original result");
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<ValueResult> invocation = executor.submit(() -> DebugInvoker.invoke(
+            Future<ValueResult> invocation = executor.submit(() -> probe.invoke(
                     methodInfo(new LinkedHashMap<>()),
                     () -> original));
             assertTrue(waitStarted.await(2, TimeUnit.SECONDS));
 
-            DebugClient.cancelActiveRequests();
+            probe.close();
 
             assertSame(original, invocation.get(2, TimeUnit.SECONDS));
             assertThat(pausePoint).hasValue("after");
@@ -440,31 +436,35 @@ class DebugInvokerTest {
         });
         server.start();
 
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 200;
-        DebuggerSettings.readTimeoutMs = 500;
-        DebuggerSettings.breakpointTimeoutMs = 10000;
+        ProbeConfig config = new ProbeConfig(
+                "http://127.0.0.1:" + server.getAddress().getPort(),
+                "business-token",
+                200,
+                500,
+                10000);
+        ReportingChannel reportingChannel = new ReportingChannel();
+        DebugClient client = new DebugClient(config, reportingChannel);
+        DebugInvoker invoker = new DebugInvoker(client, reportingChannel);
         AtomicLong now = new AtomicLong();
         ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
         scheduler.setRemoveOnCancelPolicy(true);
         ReportingLeaseManager lease = new ReportingLeaseManager(
                 Duration.ofSeconds(30), scheduler, () -> "expiring-lease",
-                DebugClient::cancelActiveRequests, now::get);
+                client::cancelActiveRequests, now::get, reportingChannel);
         String leaseId = (String) lease.handle("{\"enabled\":true}").body().get("lease_id");
         LinkedHashMap<String, Object> beforeParams = new LinkedHashMap<>(Map.of("mode", "original"));
         AtomicReference<Map<String, Object>> businessParams = new AtomicReference<>();
         ValueResult afterOriginal = ValueResult.success("original result");
         ExecutorService invocations = Executors.newFixedThreadPool(2);
         try {
-            Future<ValueResult> beforeInvocation = invocations.submit(() -> DebugInvoker.invoke(
+            Future<ValueResult> beforeInvocation = invocations.submit(() -> invoker.invoke(
                     TestDebugMethodInfos.commonMethodData(
                             "Lease", "before-pause", "beforeMethod", 1, beforeParams),
                     () -> {
                         businessParams.set(new LinkedHashMap<>(beforeParams));
                         return ValueResult.success("before completed");
                     }));
-            Future<ValueResult> afterInvocation = invocations.submit(() -> DebugInvoker.invoke(
+            Future<ValueResult> afterInvocation = invocations.submit(() -> invoker.invoke(
                     TestDebugMethodInfos.commonMethodData(
                             "Lease", "after-pause", "afterMethod", 1, new LinkedHashMap<>()),
                     () -> afterOriginal));
@@ -480,12 +480,12 @@ class DebugInvokerTest {
             assertSame(afterOriginal, afterInvocation.get(2, TimeUnit.SECONDS));
             assertThat(businessParams.get()).containsExactlyEntriesOf(Map.of("mode", "original"));
             assertThat(beforeParams).containsExactlyEntriesOf(Map.of("mode", "original"));
-            assertThat(DebuggerSettings.enabled).isFalse();
+            assertThat(reportingChannel.isActive()).isFalse();
 
             int beforeCountAfterExpiry = beforeReports.get();
             int afterCountAfterExpiry = afterReports.get();
             ValueResult direct = ValueResult.success("direct");
-            assertSame(direct, DebugInvoker.invoke(
+            assertSame(direct, invoker.invoke(
                     TestDebugMethodInfos.commonMethodData(
                             "Lease", "disabled", "disabledMethod", 1, new LinkedHashMap<>()),
                     () -> direct));
@@ -650,7 +650,7 @@ class DebugInvokerTest {
         startAfterDebuggerServer(false, "{}", afterCalls, waitCalls, legacyAfterCalls);
         IllegalStateException runtimeFailure = new IllegalStateException("runtime failure");
 
-        assertThatThrownBy(() -> DebugInvoker.invoke(
+        assertThatThrownBy(() -> probe.invoke(
                 methodInfo(new LinkedHashMap<>()),
                 () -> {
                     throw runtimeFailure;
@@ -662,7 +662,7 @@ class DebugInvokerTest {
 
         Exception checkedFailure = new Exception("checked failure");
         try {
-            DebugInvoker.invoke(methodInfo(new LinkedHashMap<>()), () -> {
+            probe.invoke(methodInfo(new LinkedHashMap<>()), () -> {
                 throw checkedFailure;
             });
             throw new AssertionError("checked exception should have been wrapped");
@@ -708,12 +708,7 @@ class DebugInvokerTest {
                     """.formatted(request.path("interaction_id").asText()));
         });
         server.start();
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 200;
-        DebuggerSettings.readTimeoutMs = 500;
-        DebuggerSettings.breakpointTimeoutMs = 2000;
+        openProbe(200, 500, 2000);
     }
 
     private void startAfterDebuggerServer(
@@ -755,12 +750,7 @@ class DebugInvokerTest {
             respond(exchange, 200, "{}");
         });
         server.start();
-        enableReporting();
-        DebuggerSettings.serverUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        DebuggerSettings.businessClientToken = "business-token";
-        DebuggerSettings.connectTimeoutMs = 200;
-        DebuggerSettings.readTimeoutMs = 500;
-        DebuggerSettings.breakpointTimeoutMs = 2000;
+        openProbe(200, 500, 2000);
     }
 
     private static DebugMethodInfo methodInfo(Map<String, Object> params) {
@@ -775,9 +765,26 @@ class DebugInvokerTest {
         exchange.close();
     }
 
-    private static void enableReporting() {
-        DebuggerSettings.enabled = true;
-        ReportingChannel.shared().activate();
+    private void openProbe(
+            int connectTimeoutMs,
+            int readTimeoutMs,
+            int breakpointTimeoutMs) throws Exception {
+        probe = BreakHubProbe.open(new ProbeConfig(
+                "http://127.0.0.1:" + server.getAddress().getPort(),
+                "business-token",
+                connectTimeoutMs,
+                readTimeoutMs,
+                breakpointTimeoutMs));
+        leaseId = OBJECT_MAPPER.readTree(
+                probe.handleLease("{\"enabled\":true}").responseBody())
+                .path("lease_id")
+                .asText();
+    }
+
+    private boolean reportingEnabled() throws Exception {
+        LeaseResult renewed = probe.handleLease(
+                "{\"enabled\":true,\"lease_id\":\"" + leaseId + "\"}");
+        return OBJECT_MAPPER.readTree(renewed.responseBody()).path("enabled").asBoolean();
     }
 
     private static class CountingMap extends AbstractMap<String, Object> {

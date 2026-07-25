@@ -4,18 +4,12 @@ import java.util.Objects;
 
 final class ReportingChannel {
 
-    private static final ReportingChannel SHARED = new ReportingChannel();
-
     private State state = State.IDLE;
     private long leaseGeneration;
     private long healthEpoch;
     private boolean probeCredit;
     private boolean probeInFlight;
     private String lastError;
-
-    static ReportingChannel shared() {
-        return SHARED;
-    }
 
     synchronized Health activate() {
         leaseGeneration++;
@@ -101,6 +95,10 @@ final class ReportingChannel {
 
     synchronized Health snapshot() {
         return snapshotLocked();
+    }
+
+    synchronized boolean isActive() {
+        return state != State.IDLE;
     }
 
     private boolean currentLease(Permit permit) {

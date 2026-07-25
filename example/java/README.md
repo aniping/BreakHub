@@ -1,6 +1,6 @@
 # Java 模拟业务服务
 
-这是一个可独立构建和运行的 Java 17 / Spring Boot 模拟业务服务。它保留了原 Demo 的业务接口和 `DebugInvoker.invoke(methodInfo, callback)` 调用形态，默认只监听 `127.0.0.1:18622`，默认连接本机 `18621` 的 BreakHub 产品服务。
+这是一个可独立构建和运行的 Java 17 / Spring Boot 模拟业务服务。Demo 在应用启动时把纯 Java `BreakHubProbe` 注册为单例 Bean，业务方法调用 `probe.invoke(methodInfo, callback)`；Probe 本身不依赖 Spring，也不提供 HTTP 接口。Demo 默认只监听 `127.0.0.1:18622`，默认连接本机 `18621` 的 BreakHub 产品服务。
 
 ## 构建与启动
 

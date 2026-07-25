@@ -18,15 +18,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
-@Component
-public class ReportingLeaseManager implements AutoCloseable {
+final class ReportingLeaseManager implements AutoCloseable {
 
-    public static final int LEASE_TIMEOUT_SECONDS = 30;
+    static final int LEASE_TIMEOUT_SECONDS = 30;
 
     private static final Logger log = LoggerFactory.getLogger(ReportingLeaseManager.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -49,14 +46,17 @@ public class ReportingLeaseManager implements AutoCloseable {
     private long nextGeneration;
     private boolean closed;
 
-    public ReportingLeaseManager() {
+    ReportingLeaseManager(
+            ReportingChannel reportingChannel,
+            Runnable cancelActiveRequests) {
         this(Duration.ofSeconds(LEASE_TIMEOUT_SECONDS), newScheduler(),
-                () -> UUID.randomUUID().toString(), DebugClient::cancelActiveRequests,
-                System::nanoTime);
+                () -> UUID.randomUUID().toString(), cancelActiveRequests,
+                System::nanoTime, reportingChannel);
     }
 
     ReportingLeaseManager(Duration timeout, ScheduledExecutorService scheduler,
-            Supplier<String> leaseIds, Runnable cancelActiveRequests, LongSupplier nanoTime) {
+            Supplier<String> leaseIds, Runnable cancelActiveRequests, LongSupplier nanoTime,
+            ReportingChannel reportingChannel) {
         if (timeout.isZero() || timeout.isNegative()) {
             throw new IllegalArgumentException("Reporting lease timeout must be positive");
         }
@@ -66,8 +66,7 @@ public class ReportingLeaseManager implements AutoCloseable {
         this.cancelActiveRequests = Objects.requireNonNull(cancelActiveRequests,
                 "cancelActiveRequests");
         this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
-        this.reportingChannel = ReportingChannel.shared();
-        DebuggerSettings.enabled = false;
+        this.reportingChannel = Objects.requireNonNull(reportingChannel, "reportingChannel");
         reportingChannel.deactivate();
     }
 
@@ -95,7 +94,6 @@ public class ReportingLeaseManager implements AutoCloseable {
             String leaseId = Objects.requireNonNull(leaseIds.get(), "lease ID");
             long generation = ++nextGeneration;
             activeLease = new ActiveLease(leaseId, generation, deadlineFromNow());
-            DebuggerSettings.enabled = true;
             ReportingChannel.Health health = reportingChannel.activate();
             replaceExpirationTask(activeLease);
             return success("created", true, true, leaseId, health);
@@ -182,7 +180,6 @@ public class ReportingLeaseManager implements AutoCloseable {
 
     private void deactivateAndCancelLocked() {
         ActiveLease closingLease = activeLease;
-        DebuggerSettings.enabled = false;
         reportingChannel.deactivate();
         if (expirationTask != null) {
             expirationTask.cancel(false);
@@ -285,7 +282,6 @@ public class ReportingLeaseManager implements AutoCloseable {
     }
 
     @Override
-    @PreDestroy
     public void close() {
         synchronized (mutex) {
             if (closed) {
@@ -295,7 +291,6 @@ public class ReportingLeaseManager implements AutoCloseable {
             if (activeLease != null) {
                 deactivateAndCancelLocked();
             } else {
-                DebuggerSettings.enabled = false;
                 reportingChannel.deactivate();
                 if (expirationTask != null) {
                     expirationTask.cancel(false);

@@ -2,12 +2,21 @@ package com.ateagents.breakhub.probe;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
-public class DebugInvoker {
+final class DebugInvoker {
 
-    public static <T> T invoke(DebugMethodInfo methodInfo, DebugCallable<T> callable) {
-        if (!DebuggerSettings.enabled) {
+    private final DebugClient client;
+    private final ReportingChannel reportingChannel;
+
+    DebugInvoker(DebugClient client, ReportingChannel reportingChannel) {
+        this.client = Objects.requireNonNull(client, "client");
+        this.reportingChannel = Objects.requireNonNull(reportingChannel, "reportingChannel");
+    }
+
+    <T> T invoke(DebugMethodInfo methodInfo, DebugCallable<T> callable) {
+        if (!reportingChannel.isActive()) {
             return callBusiness(callable);
         }
 
@@ -18,14 +27,14 @@ public class DebugInvoker {
         WaitResponse completedWait = null;
 
         try {
-            BeforeCallResponse beforeResponse = DebugClient.beforeCall(beforeRequest);
+            BeforeCallResponse beforeResponse = client.beforeCall(beforeRequest);
             if (beforeResponse != null && beforeResponse.shouldWait(callId)) {
                 System.out.println("[BreakHub] breakpoint hit, waiting. callId="
                         + callId
                         + ", method="
                         + methodInfo.getMethodName());
 
-                completedWait = DebugClient.waitContinue(callId);
+                completedWait = client.waitContinue(callId);
                 System.out.println("[BreakHub] wait finished. callId="
                         + callId
                         + ", result="
@@ -97,19 +106,19 @@ public class DebugInvoker {
         return request;
     }
 
-    private static <T> T completeAfter(
+    private <T> T completeAfter(
             String callId,
             DebugMethodInfo methodInfo,
             T originalResult) {
         try {
-            AfterCallResponse afterResponse = DebugClient.afterCall(
+            AfterCallResponse afterResponse = client.afterCall(
                     buildAfterSuccessRequest(callId, originalResult));
             if (afterResponse != null && afterResponse.shouldWait(callId)) {
                 System.out.println("[BreakHub] after breakpoint hit, waiting. callId="
                         + callId
                         + ", method="
                         + methodInfo.getMethodName());
-                WaitResponse waitResponse = DebugClient.waitContinue(callId, "after");
+                WaitResponse waitResponse = client.waitContinue(callId, "after");
                 System.out.println("[BreakHub] after wait finished. callId="
                         + callId
                         + ", result="
