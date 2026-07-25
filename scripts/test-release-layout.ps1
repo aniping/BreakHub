@@ -85,7 +85,7 @@ if (-not $hubToken -or $hubToken -ne $demoToken) {
     throw 'Hub and Java Demo business-client-token values do not match.'
 }
 if ($configText -notmatch '(?m)^\s*address:\s*127\.0\.0\.1\s*$' -or
-    $configText -match '请替换') {
+    $configText -match '\u8BF7\u66FF\u6362') {
     throw 'Packaged Hub configuration is not ready for local-only integration.'
 }
 

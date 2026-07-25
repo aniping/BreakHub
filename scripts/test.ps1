@@ -6,6 +6,15 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+if (-not (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) {
+    throw "Windows PowerShell 5.1 executable is missing: $windowsPowerShell"
+}
+& $windowsPowerShell `
+    -NoProfile `
+    -File (Join-Path $PSScriptRoot 'test-powershell51-syntax.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 syntax validation failed.' }
+
 Push-Location (Join-Path $repoRoot 'bp-hub\web')
 try {
     npm test

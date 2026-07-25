@@ -20,7 +20,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 - Java 17+、Maven 3.9+
 - Node.js 20+、npm
 - Conda 环境 `breakhub`，Python 3.12
-- PowerShell 7（`pwsh`）
+- PowerShell 7（`pwsh`）；正式打包脚本同时兼容 Windows PowerShell 5.1
 
 Python 环境使用 `requirements.txt` 安装：
 
@@ -37,6 +37,12 @@ pwsh -File .\scripts\build.ps1 -Python 'python'
 pwsh -File .\scripts\test.ps1 -Python 'python'
 pwsh -File .\scripts\package.ps1 -Python 'python'
 pwsh -File .\scripts\package-java-demo.ps1
+```
+
+Windows PowerShell 5.1 也可以执行正式打包：
+
+```powershell
+powershell.exe -NoProfile -File .\scripts\package.ps1 -Python 'python'
 ```
 
 `package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录包含 Skill ZIP、独立管理 EXE 和用户手册，Skill ZIP 内含 `breakhub-mcp.exe`。
