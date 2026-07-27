@@ -13,7 +13,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 | `example/java/` | Java 集成示例，仅用于验证，不作为发布产物 |
 | `scripts/` | 仓库级构建、测试、打包和管理器源码 |
 
-仓库根目录没有 `pom.xml`，各语言项目独立管理依赖和生命周期。OpenCode 的 MCP 服务键继续使用 `microbreakpoint`，因此已公开的工具前缀保持为 `microbreakpoint_*`。
+仓库根目录没有 `pom.xml`，各语言项目独立管理依赖和生命周期。OpenCode 与 AteAgent 的 MCP 服务键都使用 `microbreakpoint`，因此已公开的工具前缀保持为 `microbreakpoint_*`。
 
 ## 环境
 
@@ -45,7 +45,7 @@ Windows PowerShell 5.1 也可以执行正式打包：
 powershell.exe -NoProfile -File .\scripts\package.ps1 -Python 'python'
 ```
 
-`package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录包含 Skill ZIP、独立管理 EXE 和用户手册，Skill ZIP 内含 `breakhub-mcp.exe`。
+`package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录同时包含 OpenCode Skill ZIP、独立管理 EXE、用户手册，以及可由 AteAgent 直接上传的 `breakpoint-debugging-ateagent-0.1.0.zip`。
 
 `package-java-demo.ps1` 独立编译 Probe、测试 Java Demo，并生成测试辅助目录 `dist/java-demo/`；该 Demo 不属于正式发布物。
 
@@ -75,3 +75,5 @@ Hub 使用 [scripts/release/hub/application.yml](scripts/release/hub/application
 ```
 
 运行期连接直接在 Agent 对话中通过 MCP 管理，不需要用户运行外部配置命令。本地只保存 BreakHub URL 与访问 Token，MCP 会从 Hub 实时刷新设备 ID 和展示名，避免双份身份数据不一致。安装、对话配置、卸载和占用处理见 [scripts/release/breakpoint-debugging/README.md](scripts/release/breakpoint-debugging/README.md)；产品配置见 [bp-hub/README.md](bp-hub/README.md)。
+
+在 AteAgent 中无需运行管理器。打开 Skill 安装页，上传同目录下的 `breakpoint-debugging-ateagent-0.1.0.zip`；AteAgent 会校验固定清单、逐文件 SHA-256、Skill 和 MCP 工具契约，再安装 Skill、运行时和 `microbreakpoint` 配置。该 ZIP 不包含安装脚本，目标连接仍在 Agent 对话中通过 MCP 管理。

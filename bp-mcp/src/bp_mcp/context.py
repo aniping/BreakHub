@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from os import getenv
+from uuid import uuid4
 
 from bp_mcp.settings import GatewaySettings
 
@@ -14,6 +15,7 @@ _CURRENT_CONTEXT: ContextVar[GatewayRequestContext | None] = ContextVar(
     "breakhub_gateway_context",
     default=None,
 )
+_PROCESS_THREAD_ID = f"pi-{uuid4()}"
 
 
 @dataclass(frozen=True)
@@ -54,9 +56,13 @@ def current_gateway_context(settings: GatewaySettings | None = None) -> GatewayR
     header_context = context_from_http_headers()
     if header_context is not None:
         return header_context
+    thread_id = getenv(
+        "MCP_GATEWAY_THREAD_ID",
+        runtime_settings.default_thread_id,
+    ).strip()
     return GatewayRequestContext(
         user_id=getenv("MCP_GATEWAY_USER_ID", runtime_settings.default_user_id).strip(),
-        thread_id=getenv("MCP_GATEWAY_THREAD_ID", runtime_settings.default_thread_id).strip(),
+        thread_id=thread_id or _PROCESS_THREAD_ID,
         roles=split_roles(getenv("MCP_GATEWAY_ROLES", "")),
     )
 

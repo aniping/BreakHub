@@ -7,7 +7,7 @@ description: Use the BreakHub local stdio MCP to discover equipment interfaces, 
 
 Use the BreakHub MCP tools as the source of truth for breakpoint state. Do not call the product HTTP API or edit its state files when the MCP tools are available.
 
-OpenCode prefixes each MCP tool with its configured server name. With the recommended server key `microbreakpoint`, call tools such as `microbreakpoint_list_equipment`; throughout this skill, the unprefixed suffix is the authoritative tool name.
+Agent clients may prefix each MCP tool with its configured server name. With the required server key `microbreakpoint`, call tools such as `microbreakpoint_list_equipment`; throughout this skill, the unprefixed suffix is the authoritative tool name.
 
 ## Run the workflow
 
@@ -16,13 +16,13 @@ OpenCode prefixes each MCP tool with its configured server name. With the recomm
 3. Call `start_debugging`. Treat `ok: true` as success even when the result says the requested state already exists.
 4. Discover the exact interface with `find_interfaces`, then confirm its schema with `get_interface`. When validating condition fields, explicitly select one Interaction as the 参考调用 and inspect it with `get_interaction`; read both params and result evidence from 同一条参考调用 instead of combining different calls. A running reference has no result evidence.
 5. Create an idempotent breakpoint with the exact `object`, `command`, and `pause_point` (`before` or `after`). Use `conditions: []` for an unconditional interface breakpoint. Every condition must explicitly use `source: "params"` or `source: "result"`; `result` is available only at `after`. Prefer paths supported by the same inspected 参考调用. If no inspected sample contains a manually supplied path, label it 未验证条件, explain that fact to the user, and continue: missing evidence does not block creation（不阻止创建）. Inspect `discarded_conditions` in every create result and disclose any non-empty list; if a before write discarded every condition, warn that the persisted breakpoint is unconditional and will pause every target call.
-6. Ask the user to trigger the business call when the call must happen outside OpenCode. Verify capture with `find_interactions`; do not infer capture from the business HTTP status.
+6. Ask the user to trigger the business call when the call must happen outside the Agent. Verify capture with `find_interactions`; do not infer capture from the business HTTP status.
 7. For a paused record, call `get_interaction` immediately before any write. Use its current `interaction_id`, `current_pause.pause_point`, original/effective content, and injection state. Explain the pause from each snapshot's `condition_evidence`: source, field path, operator, expected value, and actual matched value. Treat it as immutable hit-time audit evidence, not as the current Breakpoint or a copy of the full payload.
 8. At `before`, inject nested parameter changes. At `after`, inject nested result changes. Call `inject_interaction`, then read the interaction again and report the effective content while it remains paused.
 9. Continue only the reviewed pause with `continue_interaction(interaction_id, pause_point)`. Re-read the record if the stage may have changed.
 10. Call `disconnect_equipment` when the task is complete. It releases debugging only when this MCP identity owns control.
 
-Read [references/tool-reference.md](references/tool-reference.md) when exact arguments, condition syntax, paging, or error handling are needed. If the tools are absent in OpenCode, report that the integration is unavailable and direct the user to the release copy of `breakpoint-debugging-manager.exe`; lifecycle management is intentionally outside this Skill.
+Read [references/tool-reference.md](references/tool-reference.md) when exact arguments, condition syntax, paging, or error handling are needed. If the tools are absent, report that the integration is unavailable and ask the user to reinstall it with the host application's BreakHub integration installer; lifecycle management is intentionally outside this Skill.
 
 ## Manage BreakHub connections
 

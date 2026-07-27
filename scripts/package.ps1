@@ -10,6 +10,15 @@ $hubOutput = Join-Path $outputRoot 'hub'
 $probeOutput = Join-Path $outputRoot 'java-probe'
 $skillOutput = Join-Path $outputRoot 'breakpoint-debugging'
 $releaseAssets = Join-Path $PSScriptRoot 'release'
+$mcpProject = Get-Content -LiteralPath (Join-Path $repoRoot 'bp-mcp\pyproject.toml') -Raw
+$versionMatch = [regex]::Match($mcpProject, '(?m)^version\s*=\s*"(?<version>[^"]+)"\s*$')
+if (-not $versionMatch.Success) {
+    throw 'Could not read the AteAgent integration version from bp-mcp/pyproject.toml.'
+}
+$integrationVersion = $versionMatch.Groups['version'].Value
+$ateAgentPackage = Join-Path `
+    $skillOutput `
+    "breakpoint-debugging-ateagent-$integrationVersion.zip"
 
 function Clear-ReleaseArtifacts {
     $resolvedRepoRoot = [IO.Path]::GetFullPath($repoRoot)
@@ -87,7 +96,18 @@ Copy-Item -LiteralPath (Join-Path $releaseAssets 'java-probe\README.md') -Destin
     -SkipMcpBuild
 if ($LASTEXITCODE -ne 0) { throw 'Skill packaging failed.' }
 
+& (Join-Path $PSScriptRoot 'package-breakpoint-debugging-ateagent.ps1') `
+    -Python $Python `
+    -Version $integrationVersion `
+    -OutputPath $ateAgentPackage `
+    -SkipMcpBuild
+if ($LASTEXITCODE -ne 0) { throw 'AteAgent integration packaging failed.' }
+
 & (Join-Path $PSScriptRoot 'test-release-layout.ps1') -DistPath $outputRoot
 if ($LASTEXITCODE -ne 0) { throw 'Release layout validation failed.' }
+& (Join-Path $PSScriptRoot 'test-ateagent-integration-package.ps1') `
+    -PackagePath $ateAgentPackage `
+    -Version $integrationVersion
+if ($LASTEXITCODE -ne 0) { throw 'AteAgent integration package contract failed.' }
 
 Write-Host "Release artifacts: $outputRoot"
