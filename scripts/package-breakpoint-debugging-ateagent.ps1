@@ -56,29 +56,6 @@ Copy-Item `
     -Destination $stagedRuntime `
     -Force
 
-$requiredTools = @(
-    'connect_equipment',
-    'continue_interaction',
-    'continue_interactions',
-    'create_breakpoint',
-    'delete_breakpoint',
-    'delete_breakpoints',
-    'disable_breakpoint',
-    'disconnect_equipment',
-    'enable_breakpoint',
-    'find_breakpoints',
-    'find_interactions',
-    'find_interfaces',
-    'get_breakpoint',
-    'get_interaction',
-    'get_interface',
-    'inject_interaction',
-    'list_connections',
-    'list_equipment',
-    'remove_connection',
-    'start_debugging',
-    'upsert_connection'
-)
 $manifest = [ordered]@{
     schemaVersion = 1
     id = 'breakhub'
@@ -93,7 +70,6 @@ $manifest = [ordered]@{
     mcp = [ordered]@{
         serverName = 'microbreakpoint'
         executable = 'runtime/win-x64/breakhub-mcp.exe'
-        requiredTools = $requiredTools
     }
 }
 $manifestPath = Join-Path $stageRoot 'ateagent-integration.json'

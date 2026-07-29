@@ -76,4 +76,4 @@ Hub 使用 [scripts/release/hub/application.yml](scripts/release/hub/application
 
 运行期连接直接在 Agent 对话中通过 MCP 管理，不需要用户运行外部配置命令。本地只保存 BreakHub URL 与访问 Token，MCP 会从 Hub 实时刷新设备 ID 和展示名，避免双份身份数据不一致。安装、对话配置、卸载和占用处理见 [scripts/release/breakpoint-debugging/README.md](scripts/release/breakpoint-debugging/README.md)；产品配置见 [bp-hub/README.md](bp-hub/README.md)。
 
-在 AteAgent 中无需运行管理器。打开 Skill 安装页，上传同目录下的 `breakpoint-debugging-ateagent-0.1.0.zip`；AteAgent 会校验固定清单、逐文件 SHA-256、Skill 和 MCP 工具契约，再安装 Skill、运行时和 `microbreakpoint` 配置。该 ZIP 不包含安装脚本，目标连接仍在 Agent 对话中通过 MCP 管理。
+在 AteAgent 中无需运行管理器。打开 Skill 安装页，上传同目录下的 `breakpoint-debugging-ateagent-0.1.0.zip`；AteAgent 会校验固定清单、逐文件 SHA-256、Skill 和 MCP 启动配置，再安装 Skill、运行时和 `microbreakpoint` 配置。工具由 MCP `tools/list` 自动发现，不在安装清单中重复枚举。该 ZIP 不包含安装脚本，目标连接仍在 Agent 对话中通过 MCP 管理。

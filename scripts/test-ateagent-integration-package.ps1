@@ -65,11 +65,8 @@ try {
         $manifest.mcp.serverName -ne 'microbreakpoint') {
         throw 'AteAgent integration manifest does not match the public contract.'
     }
-    $requiredTools = @($manifest.mcp.requiredTools)
-    foreach ($tool in @('list_equipment', 'connect_equipment', 'start_debugging')) {
-        if ($requiredTools -notcontains $tool) {
-            throw "AteAgent manifest is missing required MCP tool: $tool"
-        }
+    if ($null -ne $manifest.mcp.PSObject.Properties['requiredTools']) {
+        throw 'AteAgent manifest should rely on MCP tool discovery instead of requiredTools.'
     }
 
     $checksums = Read-ZipJson -Entry $entries['SHA256SUMS.json']
