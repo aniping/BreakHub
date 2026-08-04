@@ -26,14 +26,15 @@ import {
 import {
   buildContinueSelectedRequest,
   drawerCandidateInteractions,
-  filterAndSortInteractions,
   interactionStatus,
   pauseSelectionKey,
   reconcileBrowsedInteractionId,
   reconcileSelectedPauseKeys,
   selectablePauseTarget,
 } from './interaction-workbench.js'
+import { interactionListPath, validInteractionPage } from './interaction-list.js'
 import { parseJson, stringifyJson } from './json.js'
+import './interaction-list.css'
 import {
   archiveSummary,
   createSessionWorkbenchClient,
@@ -48,6 +49,12 @@ const workspaces = ref([])
 const browsedSessionArchive = ref(null)
 const interfaces = ref([])
 const interactions = ref([])
+const interactionDetail = ref(null)
+const interactionPage = ref(0)
+const interactionTotal = ref(0)
+const interactionTotalPages = ref(0)
+const interactionSessionTotal = ref(0)
+const interactionPausedTotal = ref(0)
 const breakpoints = ref([])
 const browsedSessionId = ref(null)
 const browsedInterfaceKey = ref(null)
@@ -70,6 +77,8 @@ const editingBreakpointId = ref(null)
 const breakpointForm = reactive({ name: '', object: '', command: '', pause_point: 'before', conditions: [] })
 const breakpointEditor = ref(null)
 const breakpointReferenceInteractionId = ref(null)
+const breakpointReferenceDetail = ref(null)
+const breakpointReferences = reactive({ items: [], page: 0, total: 0, totalPages: 0 })
 const breakpointReferenceSource = ref('params')
 const highlightedBreakpointConditionPath = ref('')
 const breakpointConditionWarning = ref(null)
@@ -110,13 +119,17 @@ const visibleInterfaces = computed(() => currentInterfacesOnly.value
   : interfaces.value)
 const groupedInterfaces = computed(() => groupItemsByObject(visibleInterfaces.value))
 const browsedInterface = computed(() => interfaces.value.find(item => interfaceKey(item) === browsedInterfaceKey.value))
-const browsedInteraction = computed(() => interactions.value.find(item => item.interaction_id === browsedInteractionId.value))
-const filteredInteractions = computed(() => filterAndSortInteractions(interactions.value, interactionFilters))
+const browsedInteraction = computed(() => (
+  interactionDetail.value?.interaction_id === browsedInteractionId.value
+    ? interactionDetail.value
+    : interactions.value.find(item => item.interaction_id === browsedInteractionId.value)
+))
+const filteredInteractions = computed(() => interactions.value)
 const groupedInteractions = computed(() => groupItemsByObject(filteredInteractions.value).map(group => ({
   ...group,
   summary: summarizeInteractionGroup(group.items),
 })))
-const recentInteractions = computed(() => filterAndSortInteractions(interactions.value, {}).slice(0, 8))
+const recentInteractions = computed(() => interactions.value.slice(0, 8))
 const latestInteractionByInterface = computed(() => {
   const result = new Map()
   for (const item of interactions.value) {
@@ -136,7 +149,8 @@ const selectedPauseCount = computed(() => continueSelectedRequest.value.targets.
 const canContinueSelected = computed(() => (
   !busy.value && !controlledByOther.value && selectedPauseCount.value > 0
 ))
-const interactionObjects = computed(() => [...new Set(interactions.value.map(item => item.object))].sort())
+const interactionObjects = computed(() => [...new Set(interfaces.value.map(item => item.object))].sort())
+const hasInteractionFilters = computed(() => Object.values(interactionFilters).some(Boolean))
 const injectionEditorSourceRevision = computed(() => injectionEditorRevision(browsedInteraction.value, control.value))
 const injectionDraft = computed(() => buildInjectionChanges(injectionEditors.value))
 const injectionChangedPointers = computed(() => {
@@ -150,6 +164,7 @@ const canInject = computed(() => (
   && !injectionDraft.value.error
 ))
 const pausedInteractions = computed(() => interactions.value.filter(item => item.current_pause))
+const firstPausedInteraction = computed(() => pausedInteractions.value[0] || null)
 const groupedBreakpoints = computed(() => groupBreakpointsByInterface(breakpoints.value))
 const groupedWorkspaces = computed(() => [
   { key: 'current', label: 'Current', items: visibleWorkspaces.value.filter(item => item.current) },
@@ -167,13 +182,15 @@ const breakpointInterface = computed(() => targetInterface(
   breakpointForm.command,
 ))
 const breakpointReferenceCandidates = computed(() => referenceInteractions(
-  interactions.value,
+  breakpointReferences.items,
   breakpointForm.object,
   breakpointForm.command,
 ))
-const breakpointReferenceInteraction = computed(() => interactions.value.find(
-  item => item.interaction_id === breakpointReferenceInteractionId.value,
-) || null)
+const breakpointReferenceInteraction = computed(() => (
+  breakpointReferenceDetail.value?.interaction_id === breakpointReferenceInteractionId.value
+    ? breakpointReferenceDetail.value
+    : interactions.value.find(item => item.interaction_id === breakpointReferenceInteractionId.value) || null
+))
 const breakpointReferenceStates = computed(() => ({
   params: referenceEvidence(breakpointReferenceInteraction.value, 'params'),
   result: referenceEvidence(breakpointReferenceInteraction.value, 'result'),
@@ -211,19 +228,23 @@ const controlLabel = computed(() => {
 })
 let heartbeatTimer
 let statusRefreshTimer
+let interactionFilterTimer
+let breakpointReferenceTimer
 let interactionDrawerTrigger
 let compactDetailMediaQuery
 
 watch(injectionEditorSourceRevision, () => prepareInjectionEditor(browsedInteraction.value))
-watch(filteredInteractions, items => {
-  const candidates = drawerCandidateInteractions(
-    interactionDrawerSource.value,
-    interactions.value,
-    items,
-  )
-  const reconciledId = reconcileBrowsedInteractionId(browsedInteractionId.value, candidates)
+watch(interactions, items => {
+  if (interactionDrawerSource.value !== 'list') return
+  const reconciledId = reconcileBrowsedInteractionId(browsedInteractionId.value, items)
   if (browsedInteractionId.value && !reconciledId) closeInteraction()
-  else browsedInteractionId.value = reconciledId
+})
+watch(() => Object.values(interactionFilters), () => {
+  interactionPage.value = 0
+  window.clearTimeout(interactionFilterTimer)
+  interactionFilterTimer = window.setTimeout(() => {
+    if (session.value) loadInteractionPage().catch(reason => { error.value = reason.message || String(reason) })
+  }, 250)
 })
 watch(visibleWorkspaces, items => {
   if (!items.some(item => item.session_id === browsedSessionId.value)) {
@@ -239,7 +260,12 @@ watch(() => [breakpointForm.object, breakpointForm.command], () => {
   if (breakpointReferenceInteraction.value
     && referenceChangesTarget(breakpointForm, breakpointReferenceInteraction.value)) {
     breakpointReferenceInteractionId.value = null
+    breakpointReferenceDetail.value = null
   }
+  window.clearTimeout(breakpointReferenceTimer)
+  breakpointReferenceTimer = window.setTimeout(() => {
+    loadBreakpointReferencePage().catch(reason => { error.value = reason.message || String(reason) })
+  }, 250)
 })
 watch(() => breakpointForm.pause_point, pausePoint => {
   breakpointReferenceSource.value = pausePoint === 'after' ? 'result' : 'params'
@@ -261,7 +287,7 @@ async function loadProduct() {
     request('/api/v1/settings'),
     request('/api/v1/sessions'),
     request('/api/v1/interfaces'),
-    request('/api/v1/interactions'),
+    request(interactionListPath(interactionPage.value, interactionFilters)),
     request('/api/v1/breakpoints'),
   ])
   overview.value = overviewValue
@@ -272,10 +298,46 @@ async function loadProduct() {
 
 function applyObservations(interfaceResponse, interactionResponse, breakpointResponse = null) {
   interfaces.value = interfaceResponse.items
-  interactions.value = interactionResponse.items
-  selectedPauseKeys.value = reconcileSelectedPauseKeys(selectedPauseKeys.value, interactions.value)
+  applyInteractionPage(interactionResponse)
   if (breakpointResponse) breakpoints.value = breakpointResponse.items
   ensureBrowsedInterface()
+}
+
+function applyInteractionPage(response) {
+  interactions.value = response.items
+  interactionTotal.value = response.total ?? response.items.length
+  interactionTotalPages.value = response.total_pages ?? (response.items.length ? 1 : 0)
+  interactionSessionTotal.value = response.session_total ?? interactionTotal.value
+  interactionPausedTotal.value = response.paused_total ?? pausedInteractions.value.length
+  interactionPage.value = validInteractionPage(response.page ?? interactionPage.value, interactionTotalPages.value)
+  selectedPauseKeys.value = reconcileSelectedPauseKeys(selectedPauseKeys.value, interactions.value)
+}
+
+function resetInteractionState() {
+  interactions.value = []
+  interactionDetail.value = null
+  breakpointReferenceDetail.value = null
+  Object.assign(breakpointReferences, { items: [], page: 0, total: 0, totalPages: 0 })
+  interactionPage.value = 0
+  interactionTotal.value = 0
+  interactionTotalPages.value = 0
+  interactionSessionTotal.value = 0
+  interactionPausedTotal.value = 0
+  browsedInteractionId.value = null
+  selectedPauseKeys.value = []
+}
+
+async function loadInteractionPage(page = interactionPage.value) {
+  const path = interactionListPath(page, interactionFilters)
+  const response = await request(path)
+  if (path !== interactionListPath(interactionPage.value, interactionFilters)) return
+  const validPage = validInteractionPage(response.page ?? page, response.total_pages ?? 0)
+  if (validPage !== page) {
+    interactionPage.value = validPage
+    await loadInteractionPage(validPage)
+    return
+  }
+  applyInteractionPage(response)
 }
 
 function ensureBrowsedInterface() {
@@ -366,12 +428,10 @@ async function doLogout() {
     workspaces.value = []
     browsedSessionArchive.value = null
     interfaces.value = []
-    interactions.value = []
+    resetInteractionState()
     breakpoints.value = []
     browsedSessionId.value = null
     browsedInterfaceKey.value = null
-    browsedInteractionId.value = null
-    selectedPauseKeys.value = []
   } catch (reason) {
     error.value = reason.message || String(reason)
   } finally {
@@ -417,13 +477,17 @@ async function heartbeat() {
 }
 
 async function refreshStatus() {
-  if (!session.value || busy.value) return
+  if (!session.value || busy.value || document.hidden) return
   try {
+    if (activeView.value === 'interactions') {
+      await refreshInteractionView()
+      return
+    }
     const [overviewValue, workspaceValue, interfaceValue, interactionValue, breakpointValue] = await Promise.all([
       request('/api/v1/overview'),
       request('/api/v1/sessions'),
       request('/api/v1/interfaces'),
-      request('/api/v1/interactions'),
+      request(interactionListPath(interactionPage.value, interactionFilters)),
       request('/api/v1/breakpoints'),
     ])
     overview.value = overviewValue
@@ -436,12 +500,23 @@ async function refreshStatus() {
       settings.value = null
       workspaces.value = []
       interfaces.value = []
-      interactions.value = []
+      resetInteractionState()
       breakpoints.value = []
     } else {
       error.value = reason.message || String(reason)
     }
   }
+}
+
+async function refreshInteractionView() {
+  const [overviewValue, workspaceValue, interactionValue] = await Promise.all([
+    request('/api/v1/overview'),
+    request('/api/v1/sessions'),
+    request(interactionListPath(interactionPage.value, interactionFilters)),
+  ])
+  overview.value = overviewValue
+  applyWorkspaces(workspaceValue)
+  applyInteractionPage(interactionValue)
 }
 
 async function runWorkspaceAction(pathOrOperation, options = {}) {
@@ -497,10 +572,9 @@ async function deleteWorkspace(item) {
 }
 
 async function clearCurrentInteractions(item) {
-  const pauseCount = interactions.value.reduce((count, interaction) => count + (interaction.pauses?.length || 0), 0)
   await runWorkspaceAction(() => sessionWorkbenchClient.clearCurrent(item, {
-    interactionCount: interactions.value.length,
-    pauseCount,
+    interactionCount: interactionSessionTotal.value,
+    pauseCount: interactionPausedTotal.value,
   }))
 }
 
@@ -579,10 +653,12 @@ function formatDurationMilliseconds(milliseconds) {
 }
 
 function interactionHitCount(item) {
+  if (Number.isFinite(item.hit_count)) return item.hit_count
   return (item.pauses || []).reduce((count, pause) => count + (pause.breakpoint_snapshots?.length || 0), 0)
 }
 
 function interactionInjectionCount(item) {
+  if (Number.isFinite(item.injection_count)) return item.injection_count
   return (item.pauses || []).reduce((count, pause) => count + (pause.injection_audit?.length || 0), 0)
 }
 
@@ -633,8 +709,10 @@ function interactionResultEvidence(item) {
   if (item.current_pause?.has_pending_injection) return '待提交注入'
   if (item.current_pause) return `等待继续 · ${item.current_pause.pause_point}`
   const result = item.result
-  const resultCode = result && typeof result === 'object' ? (result.code ?? result.status ?? result.result) : null
-  const resultMessage = result && typeof result === 'object' ? (result.message ?? result.error) : null
+  const resultCode = item.result_code
+    ?? (result && typeof result === 'object' ? (result.code ?? result.status ?? result.result) : null)
+  const resultMessage = item.result_message
+    ?? (result && typeof result === 'object' ? (result.message ?? result.error) : null)
   const readableMessage = ['string', 'number'].includes(typeof resultMessage) ? resultMessage : null
   if (resultCode !== null || readableMessage) return [resultCode, readableMessage].filter(value => value !== null && value !== '').join(' · ')
   if (interactionStatus(item) === 'in_progress') return '等待 after 回报'
@@ -672,12 +750,12 @@ function interactionEvidenceSummary(item) {
   }
 
   const result = item.result
-  const resultCode = result && typeof result === 'object'
+  const resultCode = item.result_code ?? (result && typeof result === 'object'
     ? (result.code ?? result.status ?? result.result)
-    : null
-  const resultMessage = result && typeof result === 'object'
+    : null)
+  const resultMessage = item.result_message ?? (result && typeof result === 'object'
     ? (result.message ?? result.error)
-    : null
+    : null)
   const readableResultMessage = ['string', 'number'].includes(typeof resultMessage)
     ? resultMessage
     : null
@@ -692,7 +770,7 @@ function interactionEvidenceSummary(item) {
 }
 
 function workspaceEvidenceSummary(item) {
-  if (item.current) return `${breakpoints.value.length} 断点 · ${interactions.value.length} 调用 · ${pausedInteractions.value.length} 暂停`
+  if (item.current) return `${breakpoints.value.length} 断点 · ${interactionSessionTotal.value} 调用 · ${interactionPausedTotal.value} 暂停`
   if (item.session_id === browsedSessionId.value && browsedSessionArchive.value) {
     return `${browsedArchiveSummary.value.breakpointCount} 断点 · ${browsedArchiveSummary.value.interactionCount} 调用 · ${browsedArchiveSummary.value.pauseCount} Pause`
   }
@@ -749,13 +827,27 @@ function openRevealedInteraction(interactionId) {
   openInteraction(interactionId, 'external')
 }
 
-function openInteraction(interactionId, source = 'list') {
+async function openFirstPausedInteraction() {
+  if (firstPausedInteraction.value) {
+    openRevealedInteraction(firstPausedInteraction.value.interaction_id)
+    return
+  }
+  try {
+    const response = await request(interactionListPath(0, { status: 'paused' }))
+    if (response.items[0]) openRevealedInteraction(response.items[0].interaction_id)
+  } catch (reason) {
+    error.value = reason.message || String(reason)
+  }
+}
+
+async function openInteraction(interactionId, source = 'list') {
   advancedFiltersOpen.value = false
   interactionDrawerTrigger = document.activeElement instanceof HTMLElement
     ? document.activeElement
     : null
   interactionDrawerSource.value = source
   browsedInteractionId.value = interactionId
+  interactionDetail.value = null
   setActiveView('interactions')
   nextTick(() => {
     if (compactDetailViewport.value) {
@@ -763,6 +855,12 @@ function openInteraction(interactionId, source = 'list') {
       interactionDrawerClose.value?.focus()
     }
   })
+  try {
+    const detail = await request(`/api/v1/interactions/${interactionId}`)
+    if (browsedInteractionId.value === interactionId) interactionDetail.value = detail
+  } catch (reason) {
+    error.value = reason.message || String(reason)
+  }
 }
 
 function closeInteraction() {
@@ -771,6 +869,7 @@ function closeInteraction() {
   interactionDrawerSource.value = null
   if (compactDetailViewport.value && interactionDialog.value?.open) interactionDialog.value.close()
   browsedInteractionId.value = null
+  interactionDetail.value = null
   nextTick(() => {
     if (trigger?.isConnected) trigger.focus()
     else interactionFilterQuery.value?.focus()
@@ -808,10 +907,8 @@ async function injectInteraction(item) {
   })
   if (result) {
     browsedInteractionId.value = item.interaction_id
-    prepareInjectionEditor(
-      interactions.value.find(value => value.interaction_id === item.interaction_id),
-      true,
-    )
+    interactionDetail.value = await request(`/api/v1/interactions/${item.interaction_id}`)
+    prepareInjectionEditor(interactionDetail.value, true)
     injectionFeedback.value = result
   }
 }
@@ -826,6 +923,9 @@ function newBreakpoint(prefill = null, referenceInteractionId = null) {
   highlightedBreakpointConditionPath.value = ''
   breakpointConditionWarning.value = null
   breakpointReferenceInteractionId.value = referenceInteractionId || null
+  breakpointReferenceDetail.value = interactionDetail.value?.interaction_id === referenceInteractionId
+    ? interactionDetail.value
+    : null
   breakpointReferenceSource.value = 'params'
   setActiveView('breakpoints')
 }
@@ -918,11 +1018,33 @@ function setBreakpointConditionFromField(field) {
   focusBreakpointCondition(breakpointForm.conditions.length - 1)
 }
 
-function selectBreakpointReference(item) {
+async function selectBreakpointReference(item) {
   if (!confirmBreakpointTargetChange(item.object, item.command)) return
   breakpointForm.object = item.object
   breakpointForm.command = item.command
   breakpointReferenceInteractionId.value = item.interaction_id
+  try {
+    breakpointReferenceDetail.value = await request(`/api/v1/interactions/${item.interaction_id}`)
+  } catch (reason) {
+    error.value = reason.message || String(reason)
+  }
+}
+
+async function loadBreakpointReferencePage(page = 0) {
+  const object = breakpointForm.object.trim()
+  const command = breakpointForm.command.trim()
+  if (!session.value || !object || !command) {
+    Object.assign(breakpointReferences, { items: [], page: 0, total: 0, totalPages: 0 })
+    return
+  }
+  const response = await request(interactionListPath(page, { object, command }))
+  if (object !== breakpointForm.object.trim() || command !== breakpointForm.command.trim()) return
+  Object.assign(breakpointReferences, {
+    items: response.items,
+    page: response.page,
+    total: response.total,
+    totalPages: response.total_pages,
+  })
 }
 
 function removeCondition(index) {
@@ -1021,6 +1143,7 @@ async function continueInteraction(item) {
   const reconciledId = reconcileBrowsedInteractionId(item.interaction_id, candidates)
   if (reconciledId) {
     browsedInteractionId.value = reconciledId
+    interactionDetail.value = await request(`/api/v1/interactions/${reconciledId}`)
     nextTick(() => {
       if (compactDetailViewport.value) interactionDrawerClose.value?.focus()
     })
@@ -1056,6 +1179,14 @@ async function continueSelectedInteractions() {
   else await refreshStatus()
 }
 
+async function changeInteractionPage(page) {
+  if (page < 0 || page >= interactionTotalPages.value || page === interactionPage.value) return
+  closeInteraction()
+  interactionPage.value = page
+  await loadInteractionPage(page)
+  nextTick(() => document.querySelector('.interaction-master')?.scrollTo({ top: 0 }))
+}
+
 onMounted(() => {
   compactDetailMediaQuery = window.matchMedia('(max-width: 1179px)')
   compactDetailViewport.value = compactDetailMediaQuery.matches
@@ -1070,6 +1201,8 @@ onUnmounted(() => {
   compactDetailMediaQuery?.removeEventListener('change', syncCompactDetailViewport)
   window.clearInterval(heartbeatTimer)
   window.clearInterval(statusRefreshTimer)
+  window.clearTimeout(interactionFilterTimer)
+  window.clearTimeout(breakpointReferenceTimer)
   window.removeEventListener('pagehide', releaseOnPageExit)
 })
 </script>
@@ -1136,20 +1269,21 @@ onUnmounted(() => {
     <section v-if="overview" class="status-strip" aria-label="全局调试状态">
       <div><span>状态</span><strong :class="{ healthy: overview.connection?.label }">● {{ overview.connection.label }}</strong></div>
       <div><span>Current Session</span><strong>{{ currentSession?.name }}</strong></div>
-      <div><span>调用</span><strong>{{ interactions.length }}</strong></div>
+      <div><span>调用</span><strong>{{ interactionSessionTotal }}</strong></div>
       <div><span>接口</span><strong>{{ interfaces.length }}</strong></div>
       <div><span>断点</span><strong>{{ breakpoints.length }}</strong></div>
-      <div><span>暂停</span><strong :class="{ warning: pausedInteractions.length }">{{ pausedInteractions.length }}</strong></div>
+      <div><span>暂停</span><strong :class="{ warning: interactionPausedTotal }">{{ interactionPausedTotal }}</strong></div>
       <div><span>调试 / 控制</span><strong>{{ debuggingLabel }} · {{ controlLabel }}</strong><small v-if="reportingError" :title="reportingError">{{ reportingError }}</small></div>
     </section>
 
-    <section v-if="pausedInteractions.length" class="pause-action-strip" aria-label="活动暂停">
+    <section v-if="interactionPausedTotal" class="pause-action-strip" aria-label="活动暂停">
       <div class="pause-action-message">
-        <strong>当前 Session 有 {{ pausedInteractions.length }} 个请求命中断点并暂停</strong>
-        <span>{{ pausedInteractions[0].object }}.{{ pausedInteractions[0].command }} · {{ pausedInteractions[0].current_pause?.pause_point }}</span>
+        <strong>当前 Session 有 {{ interactionPausedTotal }} 个请求命中断点并暂停</strong>
+        <span v-if="firstPausedInteraction">{{ firstPausedInteraction.object }}.{{ firstPausedInteraction.command }} · {{ firstPausedInteraction.current_pause?.pause_point }}</span>
+        <span v-else>暂停记录不在当前筛选页</span>
       </div>
       <div class="pause-action-buttons">
-        <button @click="openRevealedInteraction(pausedInteractions[0].interaction_id)">打开暂停记录</button>
+        <button @click="openFirstPausedInteraction">打开暂停记录</button>
         <button class="pause-continue" :disabled="!canContinueSelected" @click="continueSelectedInteractions">继续所选（{{ selectedPauseCount }}）</button>
       </div>
     </section>
@@ -1160,7 +1294,7 @@ onUnmounted(() => {
           <button aria-label="概览" :class="{ active: activeView === 'overview' }" @click="setActiveView('overview')"><UiIcon name="overview" /><span>概览</span></button>
           <button aria-label="接口列表" :class="{ active: activeView === 'interfaces' }" @click="setActiveView('interfaces')"><UiIcon name="interfaces" /><span>接口列表</span><b>{{ interfaces.length }}</b></button>
           <button aria-label="断点规则" :class="{ active: activeView === 'breakpoints' }" @click="setActiveView('breakpoints')"><UiIcon name="breakpoints" /><span>断点规则</span><b>{{ breakpoints.length }}</b></button>
-          <button aria-label="调用记录" :class="{ active: activeView === 'interactions' }" @click="setActiveView('interactions')"><UiIcon name="interactions" /><span>调用记录</span><b>{{ interactions.length }}</b></button>
+          <button aria-label="调用记录" :class="{ active: activeView === 'interactions' }" @click="setActiveView('interactions')"><UiIcon name="interactions" /><span>调用记录</span><b>{{ interactionSessionTotal }}</b></button>
           <button aria-label="会话列表" :class="{ active: activeView === 'sessions' }" @click="setActiveView('sessions')"><UiIcon name="sessions" /><span>会话列表</span><b>{{ workspaces.length }}</b></button>
           <button aria-label="设置" :class="{ active: activeView === 'settings' }" @click="setActiveView('settings')"><UiIcon name="settings" /><span>设置</span></button>
         </nav>
@@ -1356,12 +1490,17 @@ onUnmounted(() => {
               </div>
               <section class="breakpoint-draft-workspace">
                 <section class="breakpoint-reference-evidence" aria-label="参考调用与字段证据">
-                  <div class="section-heading"><div><strong>参考调用</strong><small>明确选择一条调用，params 与 result 证据都只取自该调用</small></div><span>{{ breakpointReferenceCandidates.length }} 条可选</span></div>
+                  <div class="section-heading"><div><strong>参考调用</strong><small>明确选择一条调用，params 与 result 证据都只取自该调用</small></div><span>{{ breakpointReferences.total }} 条可选</span></div>
                   <div v-if="breakpointReferenceCandidates.length" class="breakpoint-reference-list">
                     <button v-for="item in breakpointReferenceCandidates" :key="item.interaction_id" type="button" :class="{ selected: item.interaction_id === breakpointReferenceInteractionId }" @click="selectBreakpointReference(item)">
                       <span><strong>{{ item.object }}.{{ item.command }}</strong><small>{{ formatTime(item.before_at) }} · {{ interactionStatusLabel(item) }} / {{ interactionPhaseLabel(item) }}</small></span>
                       <span><small>{{ breakpointReferenceStructure(item) }}</small><code>{{ shortInteractionId(item) }}</code></span>
                     </button>
+                    <nav v-if="breakpointReferences.totalPages > 1" class="interaction-pagination" aria-label="参考调用分页">
+                      <button type="button" :disabled="breakpointReferences.page === 0" @click="loadBreakpointReferencePage(breakpointReferences.page - 1)">上一页</button>
+                      <span>第 {{ breakpointReferences.page + 1 }} / {{ breakpointReferences.totalPages }} 页</span>
+                      <button type="button" :disabled="breakpointReferences.page + 1 >= breakpointReferences.totalPages" @click="loadBreakpointReferencePage(breakpointReferences.page + 1)">下一页</button>
+                    </nav>
                   </div>
                   <p v-else class="empty-state">当前目标没有已加载调用；仍可创建未验证条件并保存。</p>
                   <div class="breakpoint-target-suggestions" aria-label="已观察目标建议">
@@ -1444,10 +1583,10 @@ onUnmounted(() => {
       <template v-if="activeView === 'interactions'">
         <header class="workspace-page-header interaction-page-header">
           <div><h1>调用记录</h1><p>Before → Business → After · 完整业务调用证据</p></div>
-          <span class="count-label">{{ filteredInteractions.length }} / {{ interactions.length }} 条记录</span>
+          <span class="count-label">第 {{ interactionTotal ? interactionPage + 1 : 0 }} / {{ interactionTotalPages }} 页 · 共 {{ interactionTotal }} 条</span>
         </header>
 
-        <section v-if="interactions.length" class="interaction-filters list-toolbar" :class="{ 'advanced-open': advancedFiltersOpen }" aria-label="Interaction 筛选">
+        <section v-if="interactionTotal || hasInteractionFilters" class="interaction-filters list-toolbar" :class="{ 'advanced-open': advancedFiltersOpen }" aria-label="Interaction 筛选">
           <label>关键词<input ref="interactionFilterQuery" v-model="interactionFilters.query" placeholder="ID、Object 或 Command" /></label>
           <label>Object<select v-model="interactionFilters.object"><option value="">全部 Object</option><option v-for="value in interactionObjects" :key="value" :value="value">{{ value }}</option></select></label>
           <label>状态<select v-model="interactionFilters.status"><option value="">全部状态</option><option value="paused">暂停</option><option value="in_progress">业务执行中</option><option value="completed">已完成</option></select></label>
@@ -1506,7 +1645,11 @@ onUnmounted(() => {
                 <span class="interaction-cell evidence-subcell payload-evidence" :title="interactionPayloadEvidence(item)">{{ interactionPayloadEvidence(item) }}</span>
               </div>
             </template>
-            <section v-if="!filteredInteractions.length" class="empty-panel"><h2>没有符合筛选条件的调用</h2><p>调整关键词、状态、阶段或调用时间后再查看。</p></section>
+            <nav v-if="interactionTotalPages > 1" class="interaction-pagination" aria-label="调用记录分页">
+              <button type="button" :disabled="interactionPage === 0" @click="changeInteractionPage(interactionPage - 1)">上一页</button>
+              <span>第 {{ interactionPage + 1 }} / {{ interactionTotalPages }} 页</span>
+              <button type="button" :disabled="interactionPage + 1 >= interactionTotalPages" @click="changeInteractionPage(interactionPage + 1)">下一页</button>
+            </nav>
           </div>
 
           <dialog
@@ -1693,7 +1836,7 @@ onUnmounted(() => {
           </article>
           </dialog>
         </section>
-        <section v-else class="panel empty-panel"><h2>Current Session 暂无调用</h2><p>未启动调试时业务保持 fail-open，也不会在这里产生脏 Interaction。</p></section>
+        <section v-else class="panel empty-panel"><h2>{{ hasInteractionFilters ? '没有符合筛选条件的调用' : 'Current Session 暂无调用' }}</h2><p>{{ hasInteractionFilters ? '调整关键词、状态、阶段或调用时间后再查看。' : '未启动调试时业务保持 fail-open，也不会在这里产生脏 Interaction。' }}</p></section>
       </template>
 
       <template v-if="activeView === 'sessions'">
