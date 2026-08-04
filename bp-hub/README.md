@@ -15,7 +15,7 @@ BreakHub 是可独立部署的装备调试产品。当前产品只有一个 Java
 - 同一 Interaction 在同一暂停点命中多条规则时只创建一个 Pause，并按稳定顺序保存全部不可变命中快照。每条快照保留完整条件定义及一一对应的 `condition_evidence`：`eq` 记录实际相等标量，`contains_any` 只记录实际交集，不复制完整 params、result 或来源数组；它是命中时的审计证据，不是当前规则副本，后续修改、屏蔽或删除规则均不会改变。业务 `wait` 会阻塞到 Web 按 `interaction_id + pause_point` 继续。
 - 当前 Pause 支持直接注入：before 只改本次 params，after 只改本次 result；嵌套 `changes` 只能认领已有字段，类型以原始内容为锚，数组只做整体替换，原始 null 不能写入非 null 值。
 - 同一 Pause 可以多次累积注入并保留有序审计；只有显式继续会把当前有效内容交给业务，停止、释放、租约失效、产品关闭或 Pause 超时都会丢弃待提交注入并返回原始内容。产品启动时还会把 Current Session 的崩溃遗留 Pause 以 `product_restart` 原因安全释放，旧记录只保留为历史，不能再勾选、注入或继续。
-- Web 使用浅色“概览 + 接口列表 + 断点规则 + 调用记录 + 会话列表 + 设置”工作台；断点编辑器由用户明确选择一条参考调用，params 与 result 字段证据都只读取该 Interaction，运行中的调用会明确标记 result 证据不可用。参考调用找不到字段时只显示“未验证条件”告警，不阻止保存，也不会把验证状态写入断点。调用记录主页面只展示筛选和暂停优先的列表，点击记录后由覆盖式右侧抽屉展示阶段时间线、命中快照、注入与释放审计，新 Pause 不会自动打开、替换当前详情或自动勾选。
+- Web 使用浅色“概览 + 接口列表 + 断点规则 + 调用记录 + 会话列表 + 设置”工作台；断点编辑器由用户明确选择一条参考调用，params 与 result 字段证据都只读取该 Interaction，运行中的调用会明确标记 result 证据不可用。参考调用找不到字段时只显示“未验证条件”告警，不阻止保存，也不会把验证状态写入断点。调用记录主页面按 100 条分页并在服务端筛选，列表只读取轻量摘要；点击记录或选择参考调用后才按需读取完整 Payload、阶段时间线、命中快照、注入与释放审计，新 Pause 不会自动打开、替换当前详情或自动勾选。
 - 调用记录中只有当前活动且没有待提交注入的 Pause 可勾选；“继续所选”会先原子校验 Current Session、控制权、活动阶段和注入状态，再只继续明确勾选项。含待提交注入的记录必须打开详情复核。
 - 单条继续是幂等操作；供其他调用方使用的“继续全部”接口仍不接受 ID 列表，只原子提交命令开始时 Current Session 的 Pause 快照。
 - Web 与 Gateway 通过具体控制实例排他控制调试；首次成功写操作自动取得控制，不暴露租约 token。
@@ -100,7 +100,7 @@ pwsh -File .\dist\hub\start.ps1
 - `POST /api/v1/breakpoints/{breakpoint_id}/enable`、`POST /api/v1/breakpoints/{breakpoint_id}/disable`：启用或屏蔽规则。
 - `DELETE /api/v1/breakpoints/{breakpoint_id}`：删除规则；历史 Pause 的命中快照不受影响。
 - `DELETE /api/v1/breakpoints`：在排他控制门内以单次事务删除 Current Session 全部规则并返回 `deleted_count`。
-- `GET /api/v1/interactions`、`GET /api/v1/interactions/{interaction_id}`：读取 Current Session 的调用状态、阶段时间线、原始 params、result、Pause 历史、当前有效内容、含期望值与实际命中值的精简条件证据、注入审计以及 payload 捕获大小；列表优先返回暂停项。
+- `GET /api/v1/interactions`：分页读取 Current Session 的轻量调用摘要，支持 `page`、最大为 100 的 `size`、`query`、`object`、`command`、`status`、`pause_point`、`from` 和 `to` 筛选，返回 `total`、`session_total`、`paused_total` 与 `total_pages`，并优先返回暂停项。`GET /api/v1/interactions/{interaction_id}` 按需读取完整阶段时间线、原始 params、result、Pause 历史、当前有效内容、条件命中证据、注入审计以及 payload 捕获大小。
 - `POST /api/v1/interactions/{interaction_id}/inject`：对当前 `pause_point` 提交嵌套 `changes` 部分对象；稳定返回 `modified`、`unchanged`、分类 `skipped`、`applied/partial/no_effect` 和当前有效内容，注入后仍保持暂停。
 - `POST /api/v1/interactions/{interaction_id}/continue`：按请求体中的 `pause_point` 继续当前 Pause，不暴露底层 `pause_id`；已继续、超时或安全释放时返回 `already_resolved` 和原释放信息。
 - `POST /api/v1/interactions/continue-selected`：仅供 Web 按非空 `targets=[{interaction_id,pause_point}]` 原子继续明确勾选且无待提交注入的活动 Pause；任一目标失效、阶段变化或需要复核时整批不执行。
