@@ -257,21 +257,6 @@ public class InteractionObservationService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> interactions() {
-        String sessionId = sessions.current().sessionId();
-        List<Map<String, Object>> items = findBySession(sessionId).stream()
-                .sorted(Comparator
-                        .comparing((InteractionRecord value) -> pauses.isPaused(value.interactionId())).reversed()
-                        .thenComparing(InteractionRecord::updatedAt, Comparator.reverseOrder())
-                        .thenComparing(InteractionRecord::interactionId))
-                .map(this::interactionBody)
-                .toList();
-        return Map.of(
-                "current_session_id", sessionId,
-                "items", items);
-    }
-
-    @Transactional(readOnly = true)
     public Map<String, Object> interaction(String interactionId) {
         String sessionId = sessions.current().sessionId();
         return find(interactionId)

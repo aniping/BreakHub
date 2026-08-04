@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ateagents.breakhub.domain.InteractionObservationService;
+import com.ateagents.breakhub.domain.InteractionListService;
 import com.ateagents.breakhub.domain.ControlIdentity;
 import com.ateagents.breakhub.domain.DebugControlService;
 import com.ateagents.breakhub.domain.PauseService;
@@ -28,16 +29,19 @@ import jakarta.servlet.http.HttpServletRequest;
 public class ObservationController {
 
     private final InteractionObservationService observations;
+    private final InteractionListService interactionLists;
     private final PauseService pauses;
     private final DebugControlService control;
     private final ControlIdentityResolver identities;
 
     public ObservationController(
             InteractionObservationService observations,
+            InteractionListService interactionLists,
             PauseService pauses,
             DebugControlService control,
             ControlIdentityResolver identities) {
         this.observations = observations;
+        this.interactionLists = interactionLists;
         this.pauses = pauses;
         this.control = control;
         this.identities = identities;
@@ -56,8 +60,8 @@ public class ObservationController {
     }
 
     @GetMapping("/interactions")
-    public Map<String, Object> interactions() {
-        return observations.interactions();
+    public Map<String, Object> interactions(@RequestParam Map<String, String> parameters) {
+        return interactionLists.interactions(parameters);
     }
 
     @GetMapping("/interactions/{interactionId}")
