@@ -76,6 +76,8 @@ class HubInstallationTest {
             }
         });
 
+        Thread.sleep(100);
+        assertThat(stopped).isNotDone();
         control.awaitStop();
         control.close();
 

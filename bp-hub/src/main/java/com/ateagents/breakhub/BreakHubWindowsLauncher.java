@@ -35,10 +35,10 @@ public final class BreakHubWindowsLauncher {
             if (lock == null) {
                 return;
             }
-            try (lock) {
+            try (lock; HubControl control = HubControl.open(state)) {
                 ConfigurableApplicationContext context = BreakHubApplication.application().run(
                         "--spring.config.location=" + configuration.toUri());
-                try (HubControl control = HubControl.open(state); context) {
+                try (context) {
                     control.awaitStop();
                 }
             }

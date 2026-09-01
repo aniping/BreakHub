@@ -39,29 +39,29 @@ final class HubControl implements AutoCloseable {
     static HubControl open(Path state) throws IOException {
         Files.createDirectories(state);
         ServerSocket server = new ServerSocket();
-        server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 4);
-        String token = randomToken();
-        Path controlFile = state.resolve("run.properties");
-        Properties properties = new Properties();
-        properties.setProperty("pid", Long.toString(ProcessHandle.current().pid()));
-        properties.setProperty("port", Integer.toString(server.getLocalPort()));
-        properties.setProperty("token", token);
-        Path temporary = Files.createTempFile(state, "run-", ".properties.tmp");
-        try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-            properties.store(writer, "BreakHub local lifecycle control");
-        }
+        Path temporary = null;
         try {
+            server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 4);
+            String token = randomToken();
+            Path controlFile = state.resolve("run.properties");
+            Properties properties = new Properties();
+            properties.setProperty("pid", Long.toString(ProcessHandle.current().pid()));
+            properties.setProperty("port", Integer.toString(server.getLocalPort()));
+            properties.setProperty("token", token);
+            temporary = Files.createTempFile(state, "run-", ".properties.tmp");
+            try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+                properties.store(writer, "BreakHub local lifecycle control");
+            }
             Files.move(
                     temporary,
                     controlFile,
                     StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException failure) {
-            Files.deleteIfExists(temporary);
-            server.close();
+            return new HubControl(server, controlFile, token);
+        } catch (IOException | RuntimeException failure) {
+            closeAfterOpenFailure(server, temporary, failure);
             throw failure;
         }
-        return new HubControl(server, controlFile, token);
     }
 
     void awaitStop() throws IOException {
@@ -101,7 +101,7 @@ final class HubControl implements AutoCloseable {
             socket.connect(
                     new InetSocketAddress(InetAddress.getLoopbackAddress(), endpoint.port()),
                     SOCKET_TIMEOUT_MILLIS);
-            socket.setSoTimeout(SOCKET_TIMEOUT_MILLIS);
+            socket.setSoTimeout((int) SHUTDOWN_TIMEOUT.toMillis());
             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
                     socket.getOutputStream(), StandardCharsets.UTF_8));
             BufferedReader reader = new BufferedReader(new InputStreamReader(
@@ -114,10 +114,12 @@ final class HubControl implements AutoCloseable {
             }
         }
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
-        while (Files.exists(controlFile) && System.nanoTime() < deadline) {
+        boolean requesterIsTarget = endpoint.pid() == ProcessHandle.current().pid();
+        while ((Files.exists(controlFile) || (!requesterIsTarget && processIsAlive(endpoint.pid())))
+                && System.nanoTime() < deadline) {
             Thread.sleep(100);
         }
-        if (Files.exists(controlFile)) {
+        if (Files.exists(controlFile) || (!requesterIsTarget && processIsAlive(endpoint.pid()))) {
             throw new IOException("BreakHub did not stop within " + SHUTDOWN_TIMEOUT.toSeconds() + " seconds");
         }
         return true;
@@ -151,6 +153,26 @@ final class HubControl implements AutoCloseable {
         return MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8),
                 actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static boolean processIsAlive(long pid) {
+        return ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+    }
+
+    private static void closeAfterOpenFailure(
+            ServerSocket server, Path temporary, Throwable failure) {
+        if (temporary != null) {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        }
+        try {
+            server.close();
+        } catch (IOException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
     }
 
     private static String randomToken() {

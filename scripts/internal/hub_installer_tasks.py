@@ -69,10 +69,21 @@ def _jdk_candidates(requested: str) -> Iterable[Path]:
     if java_home:
         yield Path(java_home)
     yield Path(r"C:\Program Files\Java\jdk-17")
-    yield Path(r"C:\Program Files\Java\jdk-23")
     discovered = shutil.which("jpackage.exe") or shutil.which("jpackage")
     if discovered:
         yield Path(discovered).resolve().parent.parent
+
+
+def _jdk_major_version(jdk: Path) -> int | None:
+    release = jdk / "release"
+    if not release.is_file():
+        return None
+    match = re.search(
+        r'^JAVA_VERSION="(\d+)(?:\.[^"]*)?"$',
+        release.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    return int(match.group(1)) if match else None
 
 
 def _find_jdk(requested: str) -> Path:
@@ -83,12 +94,14 @@ def _find_jdk(requested: str) -> Path:
         if key in seen:
             continue
         seen.add(key)
-        if (resolved / "bin" / "jpackage.exe").is_file() and (
+        if _jdk_major_version(resolved) == 17 and (
+            resolved / "bin" / "jpackage.exe"
+        ).is_file() and (
             resolved / "bin" / "jlink.exe"
         ).is_file():
             return resolved
     detail = requested or "JAVA_HOME, Program Files Java installations, and PATH"
-    raise TaskError(f"A JDK with jpackage and jlink was not found via {detail}.")
+    raise TaskError(f"A Java 17 JDK with jpackage and jlink was not found via {detail}.")
 
 
 def _find_nsis(requested: str) -> Path:
@@ -254,6 +267,8 @@ def package_hub_installer(
     run(
         [
             nsis,
+            "/INPUTCHARSET",
+            "UTF8",
             f"/DAPP_IMAGE={image}",
             f"/DOUTPUT_FILE={output}",
             f"/DPRODUCT_VERSION={version}",

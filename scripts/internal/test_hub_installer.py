@@ -11,8 +11,8 @@ INTERNAL_ROOT = REPO_ROOT / "scripts" / "internal"
 if str(INTERNAL_ROOT) not in sys.path:
     sys.path.insert(0, str(INTERNAL_ROOT))
 
-from hub_installer_tasks import RUNTIME_MODULES  # noqa: E402
-from task_support import reset_directory  # noqa: E402
+from hub_installer_tasks import RUNTIME_MODULES, _find_jdk  # noqa: E402
+from task_support import TaskError, reset_directory  # noqa: E402
 
 
 class HubInstallerContractTest(unittest.TestCase):
@@ -37,7 +37,24 @@ class HubInstallerContractTest(unittest.TestCase):
         ):
             self.assertIn(required, script)
         self.assertNotIn(r'RMDir /r "$LOCALAPPDATA\BreakHub"', script)
+        self.assertNotIn('!insertmacro MUI_PAGE_DIRECTORY', script)
+        self.assertGreaterEqual(
+            script.count(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"'), 3
+        )
         self.assertNotIn("breakhub-mcp", script.lower())
+
+    def test_builder_rejects_a_non_java_17_jdk(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_value:
+            directory = Path(directory_value)
+            (directory / "bin").mkdir()
+            (directory / "bin" / "jpackage.exe").touch()
+            (directory / "bin" / "jlink.exe").touch()
+            (directory / "release").write_text(
+                'JAVA_VERSION="23.0.2"\n', encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(TaskError, "Java 17"):
+                _find_jdk(str(directory))
 
     def test_installer_configuration_uses_a_runtime_home_placeholder(self) -> None:
         template = (

@@ -26,7 +26,6 @@ RequestExecutionLevel user
 Name "${PRODUCT_NAME}"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\BreakHub"
-InstallDirRegKey HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
 SetCompressor /SOLID lzma
 ShowInstDetails show
 ShowUninstDetails show
@@ -43,7 +42,6 @@ VIAddVersionKey /LANG=2052 "ProductVersion" "${PRODUCT_VERSION}"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\BreakHub-Start.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "启动 BreakHub"
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -53,6 +51,7 @@ VIAddVersionKey /LANG=2052 "ProductVersion" "${PRODUCT_VERSION}"
 Var SkipShortcuts
 
 Function .onInit
+  StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"
   ${GetOptions} $CMDLINE "/SKIPSHORTCUTS" $0
   ${If} $0 != ""
     StrCpy $SkipShortcuts "1"
@@ -60,9 +59,16 @@ Function .onInit
 FunctionEnd
 
 Section "BreakHub" MainSection
-  IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 +2
-    ExecWait '"$INSTDIR\BreakHub-Stop.exe"'
+  StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"
+  IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 stop_for_upgrade_done
+    ExecWait '"$INSTDIR\BreakHub-Stop.exe"' $0
+    ${If} $0 != 0
+      MessageBox MB_ICONSTOP|MB_OK "BreakHub 未能正常停止，安装已取消。请稍后重试。" /SD IDOK
+      Abort
+    ${EndIf}
+  stop_for_upgrade_done:
 
+  RMDir /r "$INSTDIR"
   SetOutPath "$INSTDIR"
   File /r "${APP_IMAGE}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -89,8 +95,14 @@ Section "BreakHub" MainSection
 SectionEnd
 
 Section "Uninstall"
-  IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 +2
-    ExecWait '"$INSTDIR\BreakHub-Stop.exe"'
+  StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"
+  IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 stop_for_uninstall_done
+    ExecWait '"$INSTDIR\BreakHub-Stop.exe"' $0
+    ${If} $0 != 0
+      MessageBox MB_ICONSTOP|MB_OK "BreakHub 未能正常停止，卸载已取消。请稍后重试。" /SD IDOK
+      Abort
+    ${EndIf}
+  stop_for_uninstall_done:
 
   Delete "$DESKTOP\BreakHub - 启动.lnk"
   Delete "$DESKTOP\BreakHub - 停止.lnk"
