@@ -61,7 +61,10 @@ class HubInstallerContractTest(unittest.TestCase):
             "install_payload_failed",
             "install_registry_failed",
             "uninstall_data_failed",
+            "uninstall_registry_cleanup_failed",
             'FindFirst $0 $1 "$INSTDIR\\*.*"',
+            'IfFileExists "$INSTDIR\\${INSTALL_MARKER_FILE}" marker_write_done',
+            '"$INSTDIR\\${INSTALL_MARKER_FILE}.tmp"',
         ):
             self.assertIn(required, script)
         self.assertNotIn("$LOCALAPPDATA", script)
@@ -88,6 +91,11 @@ class HubInstallerContractTest(unittest.TestCase):
         self.assertLess(
             script.index("uninstall_data_failed:"),
             script.index(r'Delete "$INSTDIR\Uninstall.exe"', script.index('Section "Uninstall"')),
+        )
+        uninstall_section = script.index('Section "Uninstall"')
+        self.assertLess(
+            script.index('DeleteRegKey HKLM "${PRODUCT_REGISTRY_KEY}"', uninstall_section),
+            script.index(r'Delete "$INSTDIR\Uninstall.exe"', uninstall_section),
         )
         self.assertNotIn(
             r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
