@@ -1,0 +1,36 @@
+# BreakHub Windows installer configuration.
+# This file is copied to %LOCALAPPDATA%/BreakHub/application.yml on first start.
+server:
+  address: 127.0.0.1
+  port: 18621
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: strict
+
+logging:
+  file:
+    name: "@BREAKHUB_HOME@/logs/breakhub.log"
+
+breakhub:
+  data-directory: "@BREAKHUB_HOME@/data"
+
+  equipment:
+    id: equipment-01
+    display-name: 一号装备
+    debugger-switch:
+      url: http://127.0.0.1:18622/api/demo/debugger/enabled
+
+  security:
+    web-username: admin
+    web-password: breakhub-local-admin
+    gateway-token: breakhub-local-gateway-token
+    business-client-token: breakhub-local-business-token
+
+  control-lease:
+    timeout: 30m
+
+  interaction:
+    pause-timeout: 25m
+    max-payload-size: 16MB

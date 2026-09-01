@@ -63,6 +63,18 @@ java -jar target\breakhub-0.1.0-SNAPSHOT.jar --spring.config.location=file:.\app
 
 打开配置文件中 `server.address` 与 `server.port` 对应的地址，例如 `http://127.0.0.1:18621/`，使用 `security.web-username` 和 `security.web-password` 登录。Web 会区分“运行中 · 业务上报正常”“运行中 · 业务服务续签异常”和“空闲 · 业务上报租约已失效”；Demo 已确认的业务上报通道异常也会单独显示。任何状态都不会显示租约 ID。
 
+### Windows 安装包
+
+构建机需要 JDK 17 的 `jpackage`、NSIS 3、Node.js、Maven 和 Python。执行：
+
+```powershell
+.\bp-hub\scripts\build-installer.cmd
+```
+
+产物为 `dist\hub\BreakHub-Setup-0.1.0.exe`。安装包按当前 Windows 用户安装到 `%LOCALAPPDATA%\Programs\BreakHub`，已经集成裁剪后的 Java 17 Runtime，终端用户不需要安装 JDK/JRE。安装后桌面和开始菜单提供“BreakHub - 启动”和“BreakHub - 停止”；对应文件是 `BreakHub-Start.exe` 与 `BreakHub-Stop.exe`，停止入口通过仅限本机且带随机令牌的控制通道触发 Spring 优雅关闭。
+
+首次启动把配置模板生成到 `%LOCALAPPDATA%\BreakHub\application.yml`，数据和日志分别位于同目录的 `data\` 与 `logs\`。升级不会覆盖已有配置；卸载只删除程序和快捷方式，不删除配置、日志或业务数据。默认密钥仅用于本机联调，真实环境必须先修改。MCP 属于 Agent 侧 stdio runtime，不随 Hub 安装。
+
 ### 真实 Demo 联调
 
 配套 Java Demo 已迁入 `example/java/`，实现 Reporting Lease 和 before/wait/after 契约。先按 [Java Demo 说明](../example/java/README.md) 构建并启动 Demo，再启动产品。产品侧重点核对：
