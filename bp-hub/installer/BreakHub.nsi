@@ -1,6 +1,6 @@
 Unicode true
 ManifestDPIAware true
-RequestExecutionLevel user
+RequestExecutionLevel admin
 
 !ifndef APP_IMAGE
   !error "APP_IMAGE is required"
@@ -35,7 +35,7 @@ Name "${PRODUCT_NAME}"
 OutFile "${OUTPUT_FILE}"
 Icon "${ICON_FILE}"
 UninstallIcon "${ICON_FILE}"
-InstallDir "$LOCALAPPDATA\Programs\BreakHub"
+InstallDir "$PROGRAMFILES64\BreakHub"
 InstallDirRegKey HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
 SetCompressor /SOLID lzma
 ShowInstDetails show

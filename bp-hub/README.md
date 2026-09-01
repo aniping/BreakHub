@@ -73,7 +73,7 @@ java -jar target\breakhub-0.1.0-SNAPSHOT.jar --spring.config.location=file:.\app
 
 需要离线搬到其他电脑打包时，把 Temurin 17 Windows x64 JDK ZIP 放在 `vendor\jdk\`。仓库当前本地已准备对应压缩包；构建脚本会校验并优先解压到 `build\jdk\`，不会向系统安装 JDK。ZIP 因体积较大而不进入 Git，复制工程时需要一并复制该目录。
 
-产物为 `dist\hub\BreakHub-Setup-0.1.0.exe`。安装界面允许用户选择安装目录，默认目录是 `%LOCALAPPDATA%\Programs\BreakHub`。裁剪后的 Java 17 Runtime 只作为 BreakHub 私有文件放在所选目录的 `runtime\` 下，不安装系统 JDK/JRE，也不修改 `JAVA_HOME` 或 `PATH`。为避免误删其他文件，安装器只接受空目录或已有的 BreakHub 安装目录。桌面只创建“BreakHub - 启动”快捷方式；开始菜单提供启动、停止和卸载入口。对应程序是 `BreakHub.exe` 与 `BreakHub-Stop.exe`，停止入口通过仅限本机且带随机令牌的控制通道触发 Spring 优雅关闭。
+产物为 `dist\hub\BreakHub-Setup-0.1.0.exe`。安装界面允许用户选择安装目录，默认目录是 `C:\Program Files\BreakHub`，因此使用默认目录安装或卸载时 Windows 会请求管理员授权。裁剪后的 Java 17 Runtime 只作为 BreakHub 私有文件放在所选目录的 `runtime\` 下，不安装系统 JDK/JRE，也不修改 `JAVA_HOME` 或 `PATH`。为避免误删其他文件，安装器只接受空目录或已有的 BreakHub 安装目录。桌面只创建“BreakHub - 启动”快捷方式；开始菜单提供启动、停止和卸载入口。对应程序是 `BreakHub.exe` 与 `BreakHub-Stop.exe`；启动程序会等待 Spring 服务就绪后自动打开默认浏览器，重复双击会打开正在运行的 Hub 地址，启动失败时则显示诊断日志位置。停止入口通过仅限本机且带随机令牌的控制通道触发 Spring 优雅关闭。
 
 首次启动把配置模板生成到 `%LOCALAPPDATA%\BreakHub\application.yml`，数据和日志分别位于同目录的 `data\` 与 `logs\`。升级不会覆盖已有配置；卸载只删除程序和快捷方式，不删除配置、日志或业务数据。默认密钥仅用于本机联调，真实环境必须先修改。MCP 属于 Agent 侧 stdio runtime，不随 Hub 安装。
 

@@ -35,8 +35,8 @@ class HubInstallerContractTest(unittest.TestCase):
             encoding="utf-8"
         )
         for required in (
-            "RequestExecutionLevel user",
-            r'$LOCALAPPDATA\Programs\BreakHub',
+            "RequestExecutionLevel admin",
+            r'$PROGRAMFILES64\BreakHub',
             "BreakHub.exe",
             "BreakHub-Stop.exe",
             "CreateShortCut",
@@ -47,6 +47,7 @@ class HubInstallerContractTest(unittest.TestCase):
         ):
             self.assertIn(required, script)
         self.assertNotIn(r'RMDir /r "$LOCALAPPDATA\BreakHub"', script)
+        self.assertNotIn(r'$LOCALAPPDATA\Programs\BreakHub', script)
         self.assertIn('!insertmacro MUI_PAGE_DIRECTORY', script)
         self.assertIn('InstallDirRegKey HKCU', script)
         self.assertNotIn(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"', script)

@@ -9,6 +9,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
@@ -29,6 +30,7 @@ final class HubControl implements AutoCloseable {
     private static final String STOPPING = "STOPPING";
     private static final int SOCKET_TIMEOUT_MILLIS = 3_000;
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(30);
+    private static final String BROWSER_URI_PROPERTY = "browser-uri";
 
     private final ServerSocket server;
     private final Path controlFile;
@@ -91,6 +93,43 @@ final class HubControl implements AutoCloseable {
         }
     }
 
+    void publishBrowserUri(URI browserUri) throws IOException {
+        Properties properties = readProperties(controlFile);
+        properties.setProperty(BROWSER_URI_PROPERTY, browserUri.toASCIIString());
+        Path temporary = Files.createTempFile(controlFile.getParent(), "run-", ".properties.tmp");
+        try {
+            try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+                properties.store(writer, "BreakHub local lifecycle control");
+            }
+            Files.move(
+                    temporary,
+                    controlFile,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    static URI awaitBrowserUri(Path state) throws IOException, InterruptedException {
+        Path controlFile = state.resolve("run.properties");
+        long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (Files.isRegularFile(controlFile)) {
+                String value = readProperties(controlFile).getProperty(BROWSER_URI_PROPERTY);
+                if (value != null && !value.isBlank()) {
+                    return parseBrowserUri(value);
+                }
+            }
+            if (!lifecycleLockIsHeld(state.resolve("hub.lock"))) {
+                throw new IOException("BreakHub is not running");
+            }
+            Thread.sleep(100);
+        }
+        throw new IOException("BreakHub did not expose its browser address within "
+                + SHUTDOWN_TIMEOUT.toSeconds() + " seconds");
+    }
+
     static boolean requestStop(Path state) throws IOException, InterruptedException {
         Path controlFile = state.resolve("run.properties");
         if (!Files.isRegularFile(controlFile) && !waitForStartingHub(state, controlFile)) {
@@ -139,10 +178,7 @@ final class HubControl implements AutoCloseable {
     }
 
     private static Endpoint readEndpoint(Path controlFile) throws IOException {
-        Properties properties = new Properties();
-        try (BufferedReader reader = Files.newBufferedReader(controlFile, StandardCharsets.UTF_8)) {
-            properties.load(reader);
-        }
+        Properties properties = readProperties(controlFile);
         try {
             return new Endpoint(
                     Long.parseLong(properties.getProperty("pid")),
@@ -150,6 +186,26 @@ final class HubControl implements AutoCloseable {
                     properties.getProperty("token"));
         } catch (RuntimeException failure) {
             throw new IOException("BreakHub lifecycle state is invalid", failure);
+        }
+    }
+
+    private static Properties readProperties(Path path) throws IOException {
+        Properties properties = new Properties();
+        try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            properties.load(reader);
+        }
+        return properties;
+    }
+
+    private static URI parseBrowserUri(String value) throws IOException {
+        try {
+            URI uri = URI.create(value);
+            if (!"http".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+                throw new IllegalArgumentException("expected an HTTP URI with a host");
+            }
+            return uri;
+        } catch (IllegalArgumentException failure) {
+            throw new IOException("BreakHub browser address is invalid", failure);
         }
     }
 

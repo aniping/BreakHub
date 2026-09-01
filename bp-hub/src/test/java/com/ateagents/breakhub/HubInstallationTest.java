@@ -2,6 +2,7 @@ package com.ateagents.breakhub;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -110,6 +111,31 @@ class HubInstallationTest {
             }
 
             assertThat(stopped.get(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void exposesTheRunningHubAddressToAdditionalLauncherInvocations() throws Exception {
+        Path state = Files.createTempDirectory("breakhub-browser-address-test-");
+        URI browserUri = URI.create("http://127.0.0.1:18621/");
+
+        try (FileChannel channel = FileChannel.open(
+                    state.resolve("hub.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock ignored = channel.lock();
+                HubControl control = HubControl.open(state)) {
+            CompletableFuture<URI> exposed = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return HubControl.awaitBrowserUri(state);
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            });
+
+            Thread.sleep(100);
+            assertThat(exposed).isNotDone();
+            control.publishBrowserUri(browserUri);
+
+            assertThat(exposed.get(5, TimeUnit.SECONDS)).isEqualTo(browserUri);
         }
     }
 }
