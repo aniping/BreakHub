@@ -9,10 +9,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -89,7 +93,7 @@ final class HubControl implements AutoCloseable {
 
     static boolean requestStop(Path state) throws IOException, InterruptedException {
         Path controlFile = state.resolve("run.properties");
-        if (!Files.isRegularFile(controlFile)) {
+        if (!Files.isRegularFile(controlFile) && !waitForStartingHub(state, controlFile)) {
             return false;
         }
         Endpoint endpoint = readEndpoint(controlFile);
@@ -157,6 +161,40 @@ final class HubControl implements AutoCloseable {
 
     private static boolean processIsAlive(long pid) {
         return ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+    }
+
+    private static boolean waitForStartingHub(Path state, Path controlFile)
+            throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        while (!Files.isRegularFile(controlFile)) {
+            if (!lifecycleLockIsHeld(state.resolve("hub.lock"))) {
+                return false;
+            }
+            if (System.nanoTime() >= deadline) {
+                throw new IOException("BreakHub did not finish starting within "
+                        + SHUTDOWN_TIMEOUT.toSeconds() + " seconds");
+            }
+            Thread.sleep(100);
+        }
+        return true;
+    }
+
+    private static boolean lifecycleLockIsHeld(Path lockFile) throws IOException {
+        if (!Files.isRegularFile(lockFile)) {
+            return false;
+        }
+        try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.WRITE)) {
+            try {
+                FileLock lock = channel.tryLock();
+                if (lock == null) {
+                    return true;
+                }
+                lock.close();
+                return false;
+            } catch (OverlappingFileLockException ignored) {
+                return true;
+            }
+        }
     }
 
     private static void closeAfterOpenFailure(

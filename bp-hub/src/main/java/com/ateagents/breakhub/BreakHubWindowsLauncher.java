@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
@@ -26,7 +27,7 @@ public final class BreakHubWindowsLauncher {
     }
 
     static void run(Path installation, Path state) throws Exception {
-        Path configuration = HubInstallation.initializeConfiguration(installation, state);
+        Files.createDirectories(state);
         try (FileChannel channel = FileChannel.open(
                 state.resolve("hub.lock"),
                 StandardOpenOption.CREATE,
@@ -36,6 +37,7 @@ public final class BreakHubWindowsLauncher {
                 return;
             }
             try (lock; HubControl control = HubControl.open(state)) {
+                Path configuration = HubInstallation.initializeConfiguration(installation, state);
                 ConfigurableApplicationContext context = BreakHubApplication.application().run(
                         "--spring.config.location=" + configuration.toUri());
                 try (context) {

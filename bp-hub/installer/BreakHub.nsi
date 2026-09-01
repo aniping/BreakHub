@@ -68,7 +68,15 @@ Section "BreakHub" MainSection
     ${EndIf}
   stop_for_upgrade_done:
 
+  ClearErrors
   RMDir /r "$INSTDIR"
+  IfErrors upgrade_cleanup_failed
+  IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed upgrade_cleanup_done
+  upgrade_cleanup_failed:
+    MessageBox MB_ICONSTOP|MB_OK "旧版 BreakHub 程序文件未能清理，安装已取消。请稍后重试。" /SD IDOK
+    Abort
+  upgrade_cleanup_done:
+
   SetOutPath "$INSTDIR"
   File /r "${APP_IMAGE}\*.*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -104,9 +112,17 @@ Section "Uninstall"
     ${EndIf}
   stop_for_uninstall_done:
 
+  ClearErrors
+  RMDir /r "$INSTDIR"
+  IfErrors uninstall_cleanup_failed
+  IfFileExists "$INSTDIR\*.*" uninstall_cleanup_failed uninstall_cleanup_done
+  uninstall_cleanup_failed:
+    MessageBox MB_ICONSTOP|MB_OK "BreakHub 程序文件未能删除，卸载未完成。请稍后重试。" /SD IDOK
+    Abort
+  uninstall_cleanup_done:
+
   Delete "$DESKTOP\BreakHub - 启动.lnk"
   Delete "$DESKTOP\BreakHub - 停止.lnk"
   RMDir /r "$SMPROGRAMS\BreakHub"
   DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
-  RMDir /r "$INSTDIR"
 SectionEnd

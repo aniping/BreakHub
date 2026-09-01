@@ -3,8 +3,11 @@ package com.ateagents.breakhub;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -83,5 +86,30 @@ class HubInstallationTest {
 
         assertThat(stopped.get(5, TimeUnit.SECONDS)).isTrue();
         assertThat(state.resolve("run.properties")).doesNotExist();
+    }
+
+    @Test
+    void waitsForTheControlEndpointWhileTheHubIsStarting() throws Exception {
+        Path state = Files.createTempDirectory("breakhub-starting-control-test-");
+        Path lockFile = state.resolve("hub.lock");
+        try (FileChannel channel = FileChannel.open(
+                    lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock ignored = channel.lock()) {
+            CompletableFuture<Boolean> stopped = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return HubControl.requestStop(state);
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            });
+
+            Thread.sleep(100);
+            assertThat(stopped).isNotDone();
+            try (HubControl control = HubControl.open(state)) {
+                control.awaitStop();
+            }
+
+            assertThat(stopped.get(5, TimeUnit.SECONDS)).isTrue();
+        }
     }
 }

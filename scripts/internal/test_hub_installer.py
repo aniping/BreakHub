@@ -41,6 +41,7 @@ class HubInstallerContractTest(unittest.TestCase):
         self.assertGreaterEqual(
             script.count(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"'), 3
         )
+        self.assertIn(r'IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed', script)
         self.assertNotIn("breakhub-mcp", script.lower())
 
     def test_builder_rejects_a_non_java_17_jdk(self) -> None:
