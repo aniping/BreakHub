@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,20 +55,21 @@ class ScriptSurfaceTest(unittest.TestCase):
             internal.mkdir(parents=True)
             shutil.copy2(SCRIPTS_ROOT / "build.cmd", scripts / "build.cmd")
             (internal / "repo_tasks.py").write_text(
-                """import sys
-expected = ["build", "-Python", "value with spaces", "alpha&beta"]
+                f"""import sys
+expected = ["build", "-Python", {sys.executable!r}, "alpha&beta"]
 raise SystemExit(37 if sys.argv[1:] == expected else 41)
 """,
                 encoding="utf-8",
             )
             driver = smoke_root / "invoke.cmd"
             driver.write_text(
-                f'@echo off\ncd /d "%SystemRoot%"\ncall "{scripts / "build.cmd"}" -Python "value with spaces" "alpha&beta"\nexit /b %errorlevel%\n',
+                f'@echo off\ncd /d "%SystemRoot%"\ncall "{scripts / "build.cmd"}" -Python "{sys.executable}" "alpha&beta"\nexit /b %errorlevel%\n',
                 encoding="ascii",
             )
             completed = subprocess.run(
                 [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", str(driver)],
                 check=False,
+                env={**os.environ, "PATH": ""},
             )
             self.assertEqual(37, completed.returncode)
 
