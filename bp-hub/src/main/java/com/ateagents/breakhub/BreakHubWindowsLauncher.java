@@ -43,7 +43,7 @@ public final class BreakHubWindowsLauncher {
                     openBrowser(installation, HubControl.awaitBrowserUri(state));
                 } catch (Exception failure) {
                     HubInstallation.recordLauncherFailure(installation, failure);
-                    HubLaunchFeedback.showBrowserFailure(installation, null);
+                    HubLaunchFeedback.showStartupWaitFailure(installation);
                 }
                 return;
             }

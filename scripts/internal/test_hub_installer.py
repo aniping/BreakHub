@@ -54,6 +54,14 @@ class HubInstallerContractTest(unittest.TestCase):
             "SetRegView 64",
             "IfSilent uninstall_preserve_data",
             "MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2",
+            "Var ExistingInstallDirectory",
+            "Var LegacyInstallDirectory",
+            "legacy_install_detected",
+            "install_directory_changed",
+            "install_payload_failed",
+            "install_registry_failed",
+            "uninstall_data_failed",
+            'FindFirst $0 $1 "$INSTDIR\\*.*"',
         ):
             self.assertIn(required, script)
         self.assertNotIn("$LOCALAPPDATA", script)
@@ -71,13 +79,23 @@ class HubInstallerContractTest(unittest.TestCase):
         self.assertIn('ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"', script)
         self.assertIn(r'IfFileExists "$INSTDIR\app\*.*" upgrade_cleanup_failed', script)
         self.assertIn(r'IfFileExists "$INSTDIR\runtime\*.*" upgrade_cleanup_failed', script)
+        self.assertIn(r'IfFileExists "$INSTDIR\app\*.jar"', script)
+        self.assertIn(r'IfFileExists "$INSTDIR\runtime\bin\server\jvm.dll"', script)
+        self.assertLess(
+            script.index("uninstall_delete_data:"),
+            script.index("!insertmacro RemoveProgramFiles", script.index('Section "Uninstall"')),
+        )
+        self.assertLess(
+            script.index("uninstall_data_failed:"),
+            script.index(r'Delete "$INSTDIR\Uninstall.exe"', script.index('Section "Uninstall"')),
+        )
         self.assertNotIn(
             r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
         )
         self.assertGreaterEqual(
             script.count(r'Delete "$DESKTOP\BreakHub - 停止.lnk"'), 2
         )
-        self.assertEqual(2, script.count("BreakHub-Start.exe"))
+        self.assertEqual(3, script.count("BreakHub-Start.exe"))
         self.assertNotIn("breakhub-mcp", script.lower())
 
     def test_main_launcher_is_named_breakhub(self) -> None:

@@ -36,6 +36,17 @@ final class HubLaunchFeedback {
         showError(browserFailureMessage(installation, browserUri));
     }
 
+    static String startupWaitFailureMessage(Path installation) {
+        return "BreakHub 尚未就绪或启动失败，无法打开浏览器。\n\n诊断日志：\n"
+                + installation.resolve("logs").resolve("launcher-error.log")
+                + "\n"
+                + installation.resolve("logs").resolve("breakhub.log");
+    }
+
+    static void showStartupWaitFailure(Path installation) {
+        showError(startupWaitFailureMessage(installation));
+    }
+
     private static void showError(String message) {
         if (GraphicsEnvironment.isHeadless()) {
             return;

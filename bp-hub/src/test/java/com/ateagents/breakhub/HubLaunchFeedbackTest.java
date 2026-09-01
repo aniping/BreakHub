@@ -29,4 +29,16 @@ class HubLaunchFeedbackTest {
                 .contains("http://127.0.0.1:18621/")
                 .contains("C:\\BreakHubState\\logs\\launcher-error.log");
     }
+
+    @Test
+    void startupWaitFailureDoesNotClaimThatTheHubIsRunning() {
+        String message = HubLaunchFeedback.startupWaitFailureMessage(
+                Path.of("C:\\BreakHubState"));
+
+        assertThat(message)
+                .contains("尚未就绪或启动失败")
+                .doesNotContain("BreakHub 已启动")
+                .contains("C:\\BreakHubState\\logs\\launcher-error.log")
+                .contains("C:\\BreakHubState\\logs\\breakhub.log");
+    }
 }

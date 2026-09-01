@@ -61,10 +61,14 @@ VIAddVersionKey /LANG=2052 "ProductVersion" "${PRODUCT_VERSION}"
 
 Var SkipShortcuts
 Var DeleteUserData
+Var ExistingInstallDirectory
+Var LegacyInstallDirectory
 
 Function .onInit
   SetRegView 64
   SetShellVarContext all
+  ReadRegStr $ExistingInstallDirectory HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+  ReadRegStr $LegacyInstallDirectory HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
   ${GetOptions} $CMDLINE "/SKIPSHORTCUTS" $0
   ${If} $0 != ""
     StrCpy $SkipShortcuts "1"
@@ -80,7 +84,6 @@ FunctionEnd
   Delete "$INSTDIR\BreakHub.exe"
   Delete "$INSTDIR\BreakHub-Stop.exe"
   Delete "$INSTDIR\BreakHub-Start.exe"
-  Delete "$INSTDIR\Uninstall.exe"
   Delete "$INSTDIR\README.txt"
   Delete "$INSTDIR\application.yml.template"
   RMDir /r "$INSTDIR\app"
@@ -97,8 +100,21 @@ Function ValidateInstallRoot
     FileClose $0
     StrCmp $1 "${INSTALL_MARKER_VALUE}" validate_valid validate_invalid
   validate_empty:
-    IfFileExists "$INSTDIR\*.*" validate_legacy validate_valid
-  validate_legacy:
+    FindFirst $0 $1 "$INSTDIR\*.*"
+    IfErrors validate_valid
+  validate_empty_loop:
+    StrCmp $1 "" validate_empty_done
+    StrCmp $1 "." validate_empty_next
+    StrCmp $1 ".." validate_empty_next validate_legacy_found
+  validate_empty_next:
+    ClearErrors
+    FindNext $0 $1
+    IfErrors validate_empty_done validate_empty_loop
+  validate_empty_done:
+    FindClose $0
+    Goto validate_valid
+  validate_legacy_found:
+    FindClose $0
     ReadRegStr $2 HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
     StrCmp $2 "$INSTDIR" validate_legacy_files 0
     ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
@@ -111,6 +127,7 @@ Function ValidateInstallRoot
   validate_invalid:
     SetErrors
   validate_valid:
+    ClearErrors
 FunctionEnd
 
 Function un.ValidateInstallRoot
@@ -124,12 +141,34 @@ Function un.ValidateInstallRoot
   un_validate_invalid:
     SetErrors
   un_validate_valid:
+    ClearErrors
 FunctionEnd
 
 Section "BreakHub" MainSection
+  GetFullPathName $0 "$INSTDIR"
+  StrCpy $INSTDIR $0
+
+  StrCmp $LegacyInstallDirectory "" legacy_install_check_done
+  IfFileExists "$LegacyInstallDirectory\BreakHub-Stop.exe" legacy_install_detected
+  IfFileExists "$LegacyInstallDirectory\BreakHub-Start.exe" legacy_install_detected legacy_install_check_done
+  legacy_install_detected:
+    SetErrorLevel 11
+    MessageBox MB_ICONSTOP|MB_OK "检测到按用户安装的旧开发版 BreakHub。为避免迁移错误或端口冲突，请先卸载旧版并手工整理原用户目录中的配置和数据，然后重新运行本安装程序。" /SD IDOK
+    Abort
+  legacy_install_check_done:
+
+  StrCmp $ExistingInstallDirectory "" install_directory_check_done
+  StrCmp $ExistingInstallDirectory "$INSTDIR" install_directory_check_done install_directory_changed
+  install_directory_changed:
+    SetErrorLevel 12
+    MessageBox MB_ICONSTOP|MB_OK "BreakHub 已安装在 $ExistingInstallDirectory。覆盖升级不能更换目录；如需更换，请先卸载现有版本。" /SD IDOK
+    Abort
+  install_directory_check_done:
+
   Call ValidateInstallRoot
   IfErrors install_root_invalid install_root_valid
   install_root_invalid:
+    SetErrorLevel 13
     MessageBox MB_ICONSTOP|MB_OK "请选择空目录，或选择已有的 BreakHub 安装目录。安装已取消。" /SD IDOK
     Abort
   install_root_valid:
@@ -137,6 +176,7 @@ Section "BreakHub" MainSection
   IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 stop_for_upgrade_done
     ExecWait '"$INSTDIR\BreakHub-Stop.exe"' $0
     ${If} $0 != 0
+      SetErrorLevel 14
       MessageBox MB_ICONSTOP|MB_OK "BreakHub 未能正常停止，安装已取消。请稍后重试。" /SD IDOK
       Abort
     ${EndIf}
@@ -150,13 +190,33 @@ Section "BreakHub" MainSection
   IfFileExists "$INSTDIR\app\*.*" upgrade_cleanup_failed
   IfFileExists "$INSTDIR\runtime\*.*" upgrade_cleanup_failed upgrade_cleanup_done
   upgrade_cleanup_failed:
+    SetErrorLevel 15
     MessageBox MB_ICONSTOP|MB_OK "旧版 BreakHub 程序文件未能清理，安装已取消。请稍后重试。" /SD IDOK
     Abort
   upgrade_cleanup_done:
 
+  ClearErrors
   SetOutPath "$INSTDIR"
   File /r "${APP_IMAGE}\*.*"
+  IfErrors install_payload_failed
+  IfFileExists "$INSTDIR\BreakHub.exe" install_start_present install_payload_failed
+  install_start_present:
+  IfFileExists "$INSTDIR\BreakHub-Stop.exe" install_stop_present install_payload_failed
+  install_stop_present:
+  IfFileExists "$INSTDIR\app\*.jar" install_jar_present install_payload_failed
+  install_jar_present:
+  IfFileExists "$INSTDIR\runtime\bin\server\jvm.dll" install_runtime_present install_payload_failed
+  install_runtime_present:
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+  IfErrors install_payload_failed
+  IfFileExists "$INSTDIR\Uninstall.exe" install_payload_ready install_payload_failed
+  install_payload_failed:
+    SetErrorLevel 16
+    !insertmacro RemoveProgramFiles
+    MessageBox MB_ICONSTOP|MB_OK "BreakHub 程序文件写入不完整，安装未完成。请检查磁盘空间和安全软件后重试。" /SD IDOK
+    Abort
+  install_payload_ready:
+
   ClearErrors
   FileOpen $0 "$INSTDIR\${INSTALL_MARKER_FILE}" w
   IfErrors marker_write_failed
@@ -164,6 +224,7 @@ Section "BreakHub" MainSection
   FileClose $0
   IfErrors marker_write_failed marker_write_done
   marker_write_failed:
+    SetErrorLevel 17
     MessageBox MB_ICONSTOP|MB_OK "无法标记 BreakHub 安装目录，安装未完成。" /SD IDOK
     Abort
   marker_write_done:
@@ -172,6 +233,7 @@ Section "BreakHub" MainSection
     CopyFiles /SILENT "$INSTDIR\application.yml.template" "$INSTDIR\application.yml"
     IfFileExists "$INSTDIR\application.yml" configuration_ready configuration_failed
   configuration_failed:
+    SetErrorLevel 18
     MessageBox MB_ICONSTOP|MB_OK "无法在安装目录创建 application.yml，安装未完成。" /SD IDOK
     Abort
   configuration_ready:
@@ -181,10 +243,12 @@ Section "BreakHub" MainSection
   data_ready:
   IfFileExists "$INSTDIR\logs" logs_ready state_directories_failed
   state_directories_failed:
+    SetErrorLevel 19
     MessageBox MB_ICONSTOP|MB_OK "无法在安装目录创建数据或日志目录，安装未完成。" /SD IDOK
     Abort
   logs_ready:
 
+  ClearErrors
   WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
@@ -195,7 +259,30 @@ Section "BreakHub" MainSection
   WriteRegDWORD HKLM "${PRODUCT_REGISTRY_KEY}" "NoRepair" 1
   WriteRegStr HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub.exe" "~ RUNASADMIN"
   WriteRegStr HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe" "~ RUNASADMIN"
-  DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
+  IfErrors install_registry_failed
+  ReadRegStr $0 HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+  StrCmp $0 "$INSTDIR" install_registry_location_valid install_registry_failed
+  install_registry_location_valid:
+  ReadRegStr $0 HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub.exe"
+  StrCmp $0 "~ RUNASADMIN" install_registry_start_valid install_registry_failed
+  install_registry_start_valid:
+  ReadRegStr $0 HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe"
+  StrCmp $0 "~ RUNASADMIN" install_registry_valid install_registry_failed
+  install_registry_failed:
+    SetErrorLevel 20
+    DeleteRegValue HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub.exe"
+    DeleteRegValue HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe"
+    DeleteRegKey HKLM "${PRODUCT_REGISTRY_KEY}"
+    !insertmacro RemoveProgramFiles
+    Delete "$INSTDIR\Uninstall.exe"
+    MessageBox MB_ICONSTOP|MB_OK "无法登记 BreakHub 卸载项或管理员运行规则，安装未完成。程序文件已回滚，配置和数据已保留。" /SD IDOK
+    Abort
+  install_registry_valid:
+
+  ReadRegStr $0 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+  StrCmp $0 "$INSTDIR" 0 legacy_registry_cleanup_done
+    DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
+  legacy_registry_cleanup_done:
 
   SetShellVarContext current
   Delete "$DESKTOP\BreakHub - 启动.lnk"
@@ -216,6 +303,7 @@ Section "Uninstall"
   Call un.ValidateInstallRoot
   IfErrors uninstall_root_invalid uninstall_root_valid
   uninstall_root_invalid:
+    SetErrorLevel 21
     MessageBox MB_ICONSTOP|MB_OK "当前目录不是有效的 BreakHub 安装目录，卸载已取消。" /SD IDOK
     Abort
   uninstall_root_valid:
@@ -223,6 +311,7 @@ Section "Uninstall"
   IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 stop_for_uninstall_done
     ExecWait '"$INSTDIR\BreakHub-Stop.exe"' $0
     ${If} $0 != 0
+      SetErrorLevel 22
       MessageBox MB_ICONSTOP|MB_OK "BreakHub 未能正常停止，卸载已取消。请稍后重试。" /SD IDOK
       Abort
     ${EndIf}
@@ -235,25 +324,35 @@ Section "Uninstall"
     StrCpy $DeleteUserData "1"
   uninstall_preserve_data:
 
+  StrCmp $DeleteUserData "1" 0 uninstall_data_ready
+    ClearErrors
+    Delete "$INSTDIR\application.yml"
+    RMDir /r "$INSTDIR\data"
+    RMDir /r "$INSTDIR\logs"
+    IfErrors uninstall_data_failed
+    IfFileExists "$INSTDIR\application.yml" uninstall_data_failed
+    IfFileExists "$INSTDIR\data" uninstall_data_failed
+    IfFileExists "$INSTDIR\logs" uninstall_data_failed uninstall_data_ready
+  uninstall_data_failed:
+    SetErrorLevel 23
+    MessageBox MB_ICONSTOP|MB_OK "配置、数据或日志仍被占用，卸载已取消。程序、卸载入口和目录标记已保留；请关闭占用文件的程序后重试。" /SD IDOK
+    Abort
+  uninstall_data_ready:
+
   ClearErrors
   !insertmacro RemoveProgramFiles
   IfErrors uninstall_cleanup_failed
   IfFileExists "$INSTDIR\BreakHub.exe" uninstall_cleanup_failed
   IfFileExists "$INSTDIR\BreakHub-Stop.exe" uninstall_cleanup_failed
   IfFileExists "$INSTDIR\app\*.*" uninstall_cleanup_failed
-  IfFileExists "$INSTDIR\runtime\*.*" uninstall_cleanup_failed uninstall_cleanup_done
+  IfFileExists "$INSTDIR\runtime\*.*" uninstall_cleanup_failed
+  Delete "$INSTDIR\Uninstall.exe"
+  IfFileExists "$INSTDIR\Uninstall.exe" uninstall_cleanup_failed uninstall_cleanup_done
   uninstall_cleanup_failed:
+    SetErrorLevel 24
     MessageBox MB_ICONSTOP|MB_OK "BreakHub 程序文件未能删除，卸载未完成。请稍后重试。" /SD IDOK
     Abort
   uninstall_cleanup_done:
-
-  StrCmp $DeleteUserData "1" 0 uninstall_data_done
-    Delete "$INSTDIR\application.yml"
-    RMDir /r "$INSTDIR\data"
-    RMDir /r "$INSTDIR\logs"
-    Delete "$INSTDIR\${INSTALL_MARKER_FILE}"
-    RMDir "$INSTDIR"
-  uninstall_data_done:
 
   SetShellVarContext current
   Delete "$DESKTOP\BreakHub - 启动.lnk"
@@ -267,4 +366,9 @@ Section "Uninstall"
   DeleteRegValue HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe"
   DeleteRegKey HKLM "${PRODUCT_REGISTRY_KEY}"
   DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
+
+  StrCmp $DeleteUserData "1" 0 uninstall_complete
+    Delete "$INSTDIR\${INSTALL_MARKER_FILE}"
+    RMDir "$INSTDIR"
+  uninstall_complete:
 SectionEnd
