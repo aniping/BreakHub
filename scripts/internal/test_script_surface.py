@@ -42,9 +42,13 @@ class ScriptSurfaceTest(unittest.TestCase):
         for name, task in ENTRYPOINTS.items():
             content = (SCRIPTS_ROOT / name).read_text(encoding="utf-8")
             self.assertIn(r"internal\repo_tasks.py", content)
-            self.assertIn(f'" {task} %*', content)
+            self.assertIn(f'_BREAKHUB_TASK={task}', content)
+            self.assertIn(r'internal\run-python-task.cmd" %*', content)
             self.assertIn("setlocal DisableDelayedExpansion", content)
-            self.assertIn("endlocal & exit /b %_BREAKHUB_EXIT_CODE%", content)
+        runner = (SCRIPTS_ROOT / "internal" / "run-python-task.cmd").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("endlocal & exit /b %_BREAKHUB_EXIT_CODE%", runner)
 
     def test_command_file_handles_spaces_arguments_and_exit_code(self) -> None:
         (REPO_ROOT / "build").mkdir(exist_ok=True)
@@ -54,6 +58,10 @@ class ScriptSurfaceTest(unittest.TestCase):
             internal = scripts / "internal"
             internal.mkdir(parents=True)
             shutil.copy2(SCRIPTS_ROOT / "build.cmd", scripts / "build.cmd")
+            shutil.copy2(
+                SCRIPTS_ROOT / "internal" / "run-python-task.cmd",
+                internal / "run-python-task.cmd",
+            )
             (internal / "repo_tasks.py").write_text(
                 f"""import sys
 expected = ["build", "-Python", {sys.executable!r}, "alpha&beta"]
