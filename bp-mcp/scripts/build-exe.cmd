@@ -7,6 +7,6 @@ if errorlevel 1 (
     exit /b 9009
 )
 
-python.exe "%~dp0internal\repo_tasks.py" build %*
+python.exe "%~dp0..\..\scripts\internal\repo_tasks.py" build-mcp-exe %*
 set "_BREAKHUB_EXIT_CODE=%ERRORLEVEL%"
 endlocal & exit /b %_BREAKHUB_EXIT_CODE%

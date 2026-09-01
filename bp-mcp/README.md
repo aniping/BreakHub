@@ -16,7 +16,7 @@ python -m mypy src/bp_mcp
 ## 构建单文件 EXE
 
 ```powershell
-pwsh -File .\scripts\build-exe.ps1
+.\scripts\build-exe.cmd
 ```
 
 产物为 `dist/breakhub-mcp.exe`。连接注册表示例见

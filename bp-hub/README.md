@@ -58,7 +58,7 @@ java -jar target\breakhub-0.1.0-SNAPSHOT.jar --spring.config.location=file:.\app
 仓库级发布脚本会把 Hub JAR、本机联调配置和启动脚本归类到 `dist/hub/`，可直接运行：
 
 ```powershell
-pwsh -File .\dist\hub\start.ps1
+.\dist\hub\start.cmd
 ```
 
 打开配置文件中 `server.address` 与 `server.port` 对应的地址，例如 `http://127.0.0.1:18621/`，使用 `security.web-username` 和 `security.web-password` 登录。Web 会区分“运行中 · 业务上报正常”“运行中 · 业务服务续签异常”和“空闲 · 业务上报租约已失效”；Demo 已确认的业务上报通道异常也会单独显示。任何状态都不会显示租约 ID。

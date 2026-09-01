@@ -5,6 +5,7 @@
 - Windows 11，默认 shell 为 PowerShell 7（`pwsh`）。
 - Python 使用 Conda 环境 `breakhub`，依赖文件为 `bp-mcp/requirements.txt`。
 - Java、Python、Node.js 项目相互独立；仓库根目录不得增加聚合 `pom.xml`。
+- 仓库不提交 `.ps1`；Windows 入口使用 `.cmd`，JSON、ZIP、哈希等复杂任务使用 Python 实现。
 
 ## 模块边界
 
