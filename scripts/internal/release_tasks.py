@@ -295,7 +295,13 @@ def clear_release_artifacts() -> None:
         ),
     )
     categories = {
-        DIST_ROOT / "hub": ("breakhub*.jar", "application.yml", "start.ps1", "start.cmd"),
+        DIST_ROOT / "hub": (
+            "breakhub*.jar",
+            "BreakHub-Setup-*.exe",
+            "application.yml",
+            "start.ps1",
+            "start.cmd",
+        ),
         DIST_ROOT / "java-probe": ("bp-probe*.jar", "README.md"),
         DIST_ROOT / SKILL_NAME: ("*.zip", "*.exe", "*.ps1", "README.md"),
         DIST_ROOT / "java-demo": ("start.ps1",),

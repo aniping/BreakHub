@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
@@ -72,9 +73,14 @@ def reset_directory(path: Path, parent: Path, description: str) -> Path:
     if resolved == parent.resolve():
         raise TaskError(f"Refusing to replace the {description} root: {resolved}")
     if resolved.exists():
-        shutil.rmtree(resolved)
+        shutil.rmtree(resolved, onerror=_remove_read_only)
     resolved.mkdir(parents=True)
     return resolved
+
+
+def _remove_read_only(function, path: str, _error) -> None:
+    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    function(path)
 
 
 def single_file(directory: Path, pattern: str) -> Path:

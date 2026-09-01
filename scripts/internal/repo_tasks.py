@@ -7,6 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from hub_installer_tasks import package_hub_installer
 from integration_tasks import test_breakpoint_debugging_install
 from release_tasks import (
     package_ateagent,
@@ -74,8 +75,30 @@ def test_command_surface() -> None:
     )
 
 
+def test_hub_installer_contract() -> None:
+    run(
+        [sys.executable, "-m", "unittest", "scripts.internal.test_hub_installer", "-v"],
+        cwd=REPO_ROOT,
+    )
+
+
+def package_release(
+    python: str,
+    jdk_home: str = "",
+    nsis_path: str = "",
+) -> Path:
+    output = package_repository(python, build_repository)
+    package_hub_installer(
+        jdk_home=jdk_home,
+        nsis_path=nsis_path,
+        skip_build=True,
+    )
+    return output
+
+
 def test_repository(python: str = "python") -> None:
     test_command_surface()
+    test_hub_installer_contract()
     web_root = REPO_ROOT / "bp-hub" / "web"
     run(["npm", "test"], cwd=web_root)
     run(["npm", "run", "build"], cwd=web_root)
@@ -116,13 +139,29 @@ def create_parser() -> argparse.ArgumentParser:
 
     package = subparsers.add_parser("package")
     _add_python(package)
+    package.add_argument("-JdkHome", "--jdk-home", default="")
+    package.add_argument("-NsisPath", "--nsis-path", default="")
     package.set_defaults(
-        handler=lambda args: package_repository(args.python, build_repository)
+        handler=lambda args: package_release(args.python, args.jdk_home, args.nsis_path)
     )
 
     java_demo = subparsers.add_parser("package-java-demo")
     _add_output(java_demo)
     java_demo.set_defaults(handler=lambda args: package_java_demo(args.output_path))
+
+    hub_installer = subparsers.add_parser("package-hub-installer")
+    _add_output(hub_installer)
+    hub_installer.add_argument("-JdkHome", "--jdk-home", default="")
+    hub_installer.add_argument("-NsisPath", "--nsis-path", default="")
+    hub_installer.add_argument("-SkipBuild", "--skip-build", action="store_true")
+    hub_installer.set_defaults(
+        handler=lambda args: package_hub_installer(
+            jdk_home=args.jdk_home,
+            nsis_path=args.nsis_path,
+            output_path=args.output_path,
+            skip_build=args.skip_build,
+        )
+    )
 
     mcp = subparsers.add_parser("build-mcp-exe")
     _add_python(mcp)
