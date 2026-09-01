@@ -4,12 +4,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 $outputRoot = Join-Path $repoRoot 'dist'
 $hubOutput = Join-Path $outputRoot 'hub'
 $probeOutput = Join-Path $outputRoot 'java-probe'
 $skillOutput = Join-Path $outputRoot 'breakpoint-debugging'
-$releaseAssets = Join-Path $PSScriptRoot 'release'
+$releaseAssets = Join-Path $scriptsRoot 'release'
 $mcpProject = Get-Content -LiteralPath (Join-Path $repoRoot 'bp-mcp\pyproject.toml') -Raw
 $versionMatch = [regex]::Match($mcpProject, '(?m)^version\s*=\s*"(?<version>[^"]+)"\s*$')
 if (-not $versionMatch.Success) {

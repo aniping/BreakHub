@@ -11,7 +11,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 | `bp-mcp/` | 独立 Python MCP 项目，构建 `breakhub-mcp.exe` |
 | `skills/breakpoint-debugging/` | Breakpoint Debugging Skill 源目录，发布时注入 MCP EXE |
 | `example/java/` | Java 集成示例，仅用于验证，不作为发布产物 |
-| `scripts/` | 仓库级构建、测试、打包和管理器源码 |
+| `scripts/` | 仓库级 CMD 入口、内部构建实现、发布模板和管理器源码 |
 
 仓库根目录没有 `pom.xml`，各语言项目独立管理依赖和生命周期。OpenCode 与 AteAgent 的 MCP 服务键都使用 `microbreakpoint`，因此已公开的工具前缀保持为 `microbreakpoint_*`。
 
@@ -20,7 +20,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 - Java 17+、Maven 3.9+
 - Node.js 20+、npm
 - Conda 环境 `breakhub`，Python 3.12
-- PowerShell 7（`pwsh`）；正式打包脚本同时兼容 Windows PowerShell 5.1
+- PowerShell 7（`pwsh`）
 
 Python 环境使用 `requirements.txt` 安装：
 
@@ -33,29 +33,25 @@ python -m pip install -e .\bp-mcp --no-deps
 ## 构建与验证
 
 ```powershell
-pwsh -File .\scripts\build.ps1 -Python 'python'
-pwsh -File .\scripts\test.ps1 -Python 'python'
-pwsh -File .\scripts\package.ps1 -Python 'python'
-pwsh -File .\scripts\package-java-demo.ps1
+.\scripts\build.cmd -Python python
+.\scripts\test.cmd -Python python
+.\scripts\package.cmd -Python python
+.\scripts\package-java-demo.cmd
 ```
 
-Windows PowerShell 5.1 也可以执行正式打包：
+`scripts/` 根目录只保留上述四个公开 CMD 入口；PowerShell 实现位于 `scripts/internal/`，不作为外部调用接口。旧的 `scripts/*.ps1` 公开路径已移除，外部自动化应改用对应的 CMD。Python 路径包含空格时必须使用双引号，例如 `-Python "C:\Program Files\Python312\python.exe"`。
 
-```powershell
-powershell.exe -NoProfile -File .\scripts\package.ps1 -Python 'python'
-```
+`package.cmd` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录同时包含 OpenCode Skill ZIP、独立管理 EXE、用户手册，以及可由 AteAgent 直接上传的 `breakpoint-debugging-ateagent-0.1.0.zip`。
 
-`package.ps1` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含可直接本机联调的 `application.yml` 与 `start.ps1`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录同时包含 OpenCode Skill ZIP、独立管理 EXE、用户手册，以及可由 AteAgent 直接上传的 `breakpoint-debugging-ateagent-0.1.0.zip`。
-
-`package-java-demo.ps1` 独立编译 Probe、测试 Java Demo，并生成测试辅助目录 `dist/java-demo/`；该 Demo 不属于正式发布物。
+`package-java-demo.cmd` 独立编译 Probe、测试 Java Demo，并生成测试辅助目录 `dist/java-demo/`；该 Demo 不属于正式发布物。
 
 ## 启动本地联调
 
 先生成正式包和 Demo 测试包，再分别在两个 PowerShell 7 终端启动：
 
 ```powershell
-pwsh -File .\scripts\package.ps1 -Python 'python'
-pwsh -File .\scripts\package-java-demo.ps1
+.\scripts\package.cmd -Python python
+.\scripts\package-java-demo.cmd
 
 # 终端 1
 pwsh -File .\dist\java-demo\start.ps1

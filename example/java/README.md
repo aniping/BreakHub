@@ -7,7 +7,7 @@
 从仓库根目录生成测试辅助包：
 
 ```powershell
-pwsh -File .\scripts\package-java-demo.ps1
+.\scripts\package-java-demo.cmd
 pwsh -File .\dist\java-demo\start.ps1
 ```
 

@@ -4,7 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 if (-not $DistPath) {
     $DistPath = Join-Path $repoRoot 'dist'
 }

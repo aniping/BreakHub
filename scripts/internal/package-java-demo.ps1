@@ -4,11 +4,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 $probePom = Join-Path $repoRoot 'bp-probe\java\pom.xml'
 $demoRoot = Join-Path $repoRoot 'example\java'
 $demoPom = Join-Path $demoRoot 'pom.xml'
-$startScript = Join-Path $PSScriptRoot 'release\java-demo\start.ps1'
+$startScript = Join-Path $scriptsRoot 'release\java-demo\start.ps1'
 
 mvn -f $probePom clean install -DskipTests
 if ($LASTEXITCODE -ne 0) { throw 'Java probe build failed.' }

@@ -7,7 +7,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 $skillSource = Join-Path $repoRoot 'skills\breakpoint-debugging'
 $runtimeSource = Join-Path $repoRoot 'bp-mcp'
 $mcpBuildOutput = Join-Path $runtimeSource 'dist\breakhub-mcp.exe'

@@ -7,7 +7,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 $skillName = 'breakpoint-debugging'
 $skillSource = Join-Path $repoRoot 'skills\breakpoint-debugging'
 $runtimeSource = Join-Path $repoRoot 'bp-mcp'
@@ -16,9 +17,9 @@ $stageRoot = Join-Path $buildRoot 'breakpoint-debugging-package'
 $stagedSkill = Join-Path $stageRoot $skillName
 $mcpBuildOutput = Join-Path $runtimeSource 'dist\breakhub-mcp.exe'
 $buildScript = Join-Path $runtimeSource 'scripts\build-exe.ps1'
-$managerBuildScript = Join-Path $PSScriptRoot 'breakpoint-debugging-manager\build.ps1'
+$managerBuildScript = Join-Path $scriptsRoot 'breakpoint-debugging-manager\build.ps1'
 $managerBuildOutput = Join-Path $buildRoot 'breakpoint-debugging-manager\dist\breakpoint-debugging-manager.exe'
-$manualSource = Join-Path $PSScriptRoot 'release\breakpoint-debugging\README.md'
+$manualSource = Join-Path $scriptsRoot 'release\breakpoint-debugging\README.md'
 
 if (-not $OutputPath) {
     $OutputPath = Join-Path $repoRoot "dist\$skillName\$skillName.zip"

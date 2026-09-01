@@ -6,7 +6,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptsRoot
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'build'))
 if (-not $PackagePath) {
     $PackagePath = Join-Path $repoRoot 'dist\breakpoint-debugging\breakpoint-debugging.zip'

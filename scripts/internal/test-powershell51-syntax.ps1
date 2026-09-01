@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$scriptsRoot = $PSScriptRoot
+$scriptsRoot = Split-Path -Parent $PSScriptRoot
 $failures = @()
 
 Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1' -Recurse -File |
