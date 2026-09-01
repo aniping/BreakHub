@@ -8,7 +8,7 @@
 
 ```powershell
 .\scripts\package-java-demo.cmd
-pwsh -File .\dist\java-demo\start.ps1
+.\dist\java-demo\start.cmd
 ```
 
 也可以在 Demo 模块内直接构建：
@@ -90,13 +90,13 @@ curl.exe --fail --silent --show-error --output NUL http://127.0.0.1:18621/
 批量调用初始化和控制接口：
 
 ```powershell
-.\scripts\call-all-demo-apis.ps1
+.\scripts\call-all-demo-apis.cmd
 ```
 
 使用非默认地址时：
 
 ```powershell
-.\scripts\call-all-demo-apis.ps1 -BaseUrl http://127.0.0.1:18622
+.\scripts\call-all-demo-apis.cmd -BaseUrl http://127.0.0.1:18622
 ```
 
 控制请求示例：
@@ -284,12 +284,7 @@ $demoProcess = Start-Process `
 $blackholeStdout = Join-Path $logRoot "blackhole.jsonl"
 $blackholeStderr = Join-Path $logRoot "blackhole.stderr.log"
 $blackholeProcess = Start-Process `
-  -FilePath powershell.exe `
-  -ArgumentList @(
-    "-NoProfile",
-    "-ExecutionPolicy", "Bypass",
-    "-File", (Resolve-Path .\scripts\reporting-http-blackhole.ps1).Path
-  ) `
+  -FilePath (Resolve-Path .\scripts\reporting-http-blackhole.cmd).Path `
   -WindowStyle Hidden `
   -RedirectStandardOutput $blackholeStdout `
   -RedirectStandardError $blackholeStderr `
@@ -335,4 +330,4 @@ $released | ConvertTo-Json -Depth 8
 - 不变的 `server_deadline_at`；
 - 最后 ACK 后 30 秒内的 expired、原始内容安全放行和注入 `discarded`。
 
-黑洞不得把本地到期推迟到 `server_deadline_at` 之后。结束时只停止 `$blackholeProcess.Id`，不要按 PowerShell 进程名终止。
+黑洞不得把本地到期推迟到 `server_deadline_at` 之后。结束时使用 `taskkill.exe /PID $blackholeProcess.Id /T /F` 精确停止该 CMD 及其 Python 子进程，不要按进程名批量终止。
