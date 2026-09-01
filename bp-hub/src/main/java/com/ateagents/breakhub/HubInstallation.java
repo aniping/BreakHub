@@ -9,29 +9,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.util.Map;
 
 final class HubInstallation {
-
-    private static final String PRODUCT_DIRECTORY = "BreakHub";
-    private static final String HOME_PLACEHOLDER = "@BREAKHUB_HOME@";
 
     private HubInstallation() {
     }
 
-    static Path stateDirectory() {
-        return stateDirectory(System.getenv(), System.getProperty("user.home"));
-    }
-
-    static Path stateDirectory(Map<String, String> environment, String userHome) {
-        String localApplicationData = environment.get("LOCALAPPDATA");
-        if (localApplicationData != null && !localApplicationData.isBlank()) {
-            return Path.of(localApplicationData, PRODUCT_DIRECTORY).toAbsolutePath().normalize();
-        }
-        if (userHome == null || userHome.isBlank()) {
-            throw new IllegalStateException("Neither LOCALAPPDATA nor user.home is available");
-        }
-        return Path.of(userHome, ".breakhub").toAbsolutePath().normalize();
+    static Path stateDirectory(Path installation) {
+        return installation.toAbsolutePath().normalize().resolve("data").resolve(".runtime");
     }
 
     static Path installationDirectory() {
@@ -49,27 +34,22 @@ final class HubInstallation {
         return parent;
     }
 
-    static Path initializeConfiguration(Path installation, Path state) throws IOException {
-        Path normalizedState = state.toAbsolutePath().normalize();
-        Files.createDirectories(normalizedState);
-        Files.createDirectories(normalizedState.resolve("data"));
-        Files.createDirectories(normalizedState.resolve("logs"));
-        Path configuration = normalizedState.resolve("application.yml");
+    static Path initializeConfiguration(Path installation) throws IOException {
+        Path normalizedInstallation = installation.toAbsolutePath().normalize();
+        Files.createDirectories(normalizedInstallation.resolve("data"));
+        Files.createDirectories(normalizedInstallation.resolve("logs"));
+        Path configuration = normalizedInstallation.resolve("application.yml");
         if (Files.isRegularFile(configuration)) {
             return configuration;
         }
 
-        Path template = installation.resolve("application.yml.template");
+        Path template = normalizedInstallation.resolve("application.yml.template");
         String source = Files.readString(template, StandardCharsets.UTF_8);
-        if (!source.contains(HOME_PLACEHOLDER)) {
-            throw new IOException("Installer configuration template is missing " + HOME_PLACEHOLDER);
-        }
-        String yamlHome = normalizedState.toString().replace("\\", "/");
-        Path temporary = Files.createTempFile(normalizedState, "application-", ".yml.tmp");
+        Path temporary = Files.createTempFile(normalizedInstallation, "application-", ".yml.tmp");
         try {
             Files.writeString(
                     temporary,
-                    source.replace(HOME_PLACEHOLDER, yamlHome),
+                    source,
                     StandardCharsets.UTF_8,
                     StandardOpenOption.TRUNCATE_EXISTING);
             moveNewFile(temporary, configuration);
@@ -81,15 +61,16 @@ final class HubInstallation {
         return configuration;
     }
 
-    static void recordLauncherFailure(Path state, Throwable failure) {
+    static void recordLauncherFailure(Path installation, Throwable failure) {
         try {
-            Files.createDirectories(state);
+            Path logs = installation.toAbsolutePath().normalize().resolve("logs");
+            Files.createDirectories(logs);
             String message = "%s %s: %s%n".formatted(
                     Instant.now(),
                     failure.getClass().getName(),
                     String.valueOf(failure.getMessage()));
             Files.writeString(
-                    state.resolve("launcher-error.log"),
+                    logs.resolve("launcher-error.log"),
                     message,
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE,

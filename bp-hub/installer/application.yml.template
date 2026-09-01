@@ -1,5 +1,5 @@
 # BreakHub Windows installer configuration.
-# This file is copied to %LOCALAPPDATA%/BreakHub/application.yml on first start.
+# This file is copied to the selected BreakHub installation directory.
 server:
   address: 127.0.0.1
   port: 18621
@@ -11,10 +11,10 @@ server:
 
 logging:
   file:
-    name: "@BREAKHUB_HOME@/logs/breakhub.log"
+    name: "${breakhub.home}/logs/breakhub.log"
 
 breakhub:
-  data-directory: "@BREAKHUB_HOME@/data"
+  data-directory: "${breakhub.home}/data"
 
   equipment:
     id: equipment-01

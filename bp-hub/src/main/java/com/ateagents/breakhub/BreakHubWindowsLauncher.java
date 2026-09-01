@@ -8,7 +8,9 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Map;
 
+import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
 public final class BreakHubWindowsLauncher {
@@ -17,12 +19,13 @@ public final class BreakHubWindowsLauncher {
     }
 
     public static void main(String[] args) {
-        Path state = HubInstallation.stateDirectory();
+        Path installation = HubInstallation.installationDirectory();
+        Path state = HubInstallation.stateDirectory(installation);
         try {
-            run(HubInstallation.installationDirectory(), state);
+            run(installation, state);
         } catch (Throwable failure) {
-            HubInstallation.recordLauncherFailure(state, failure);
-            HubLaunchFeedback.showStartupFailure(state);
+            HubInstallation.recordLauncherFailure(installation, failure);
+            HubLaunchFeedback.showStartupFailure(installation);
             failure.printStackTrace(System.err);
             System.exit(1);
         }
@@ -36,15 +39,24 @@ public final class BreakHubWindowsLauncher {
                 StandardOpenOption.WRITE)) {
             FileLock lock = tryLock(channel);
             if (lock == null) {
-                openBrowser(state, HubControl.awaitBrowserUri(state));
+                try {
+                    openBrowser(installation, HubControl.awaitBrowserUri(state));
+                } catch (Exception failure) {
+                    HubInstallation.recordLauncherFailure(installation, failure);
+                    HubLaunchFeedback.showBrowserFailure(installation, null);
+                }
                 return;
             }
             try (lock; HubControl control = HubControl.open(state)) {
-                Path configuration = HubInstallation.initializeConfiguration(installation, state);
-                ConfigurableApplicationContext context = BreakHubApplication.application().run(
+                Path configuration = HubInstallation.initializeConfiguration(installation);
+                SpringApplication application = BreakHubApplication.application();
+                application.setDefaultProperties(Map.of(
+                        "breakhub.home",
+                        installation.toAbsolutePath().normalize().toString().replace("\\", "/")));
+                ConfigurableApplicationContext context = application.run(
                         "--spring.config.location=" + configuration.toUri());
                 try (context) {
-                    publishAndOpenBrowser(state, control, context);
+                    publishAndOpenBrowser(installation, state, control, context);
                     control.awaitStop();
                 }
             }
@@ -52,7 +64,10 @@ public final class BreakHubWindowsLauncher {
     }
 
     private static void publishAndOpenBrowser(
-            Path state, HubControl control, ConfigurableApplicationContext context) {
+            Path installation,
+            Path state,
+            HubControl control,
+            ConfigurableApplicationContext context) {
         URI browserUri;
         try {
             String address = context.getEnvironment().getProperty("server.address", "127.0.0.1");
@@ -62,22 +77,24 @@ public final class BreakHubWindowsLauncher {
                     : context.getEnvironment().getRequiredProperty("server.port", Integer.class);
             browserUri = HubBrowser.uri(address, port);
         } catch (RuntimeException failure) {
-            HubInstallation.recordLauncherFailure(state, failure);
+            HubInstallation.recordLauncherFailure(installation, failure);
+            HubLaunchFeedback.showBrowserFailure(installation, null);
             return;
         }
         try {
             control.publishBrowserUri(browserUri);
         } catch (IOException failure) {
-            HubInstallation.recordLauncherFailure(state, failure);
+            HubInstallation.recordLauncherFailure(installation, failure);
         }
-        openBrowser(state, browserUri);
+        openBrowser(installation, browserUri);
     }
 
-    private static void openBrowser(Path state, URI browserUri) {
+    private static void openBrowser(Path installation, URI browserUri) {
         try {
             HubBrowser.open(browserUri);
         } catch (Exception failure) {
-            HubInstallation.recordLauncherFailure(state, failure);
+            HubInstallation.recordLauncherFailure(installation, failure);
+            HubLaunchFeedback.showBrowserFailure(installation, browserUri);
         }
     }
 

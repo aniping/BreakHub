@@ -28,6 +28,7 @@ RequestExecutionLevel admin
 !define PRODUCT_NAME "BreakHub"
 !define PRODUCT_PUBLISHER "AteAgents"
 !define PRODUCT_REGISTRY_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\BreakHub"
+!define APP_COMPATIBILITY_KEY "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
 !define INSTALL_MARKER_FILE ".breakhub-install-root"
 !define INSTALL_MARKER_VALUE "BreakHub.InstallRoot.v1"
 
@@ -36,7 +37,7 @@ OutFile "${OUTPUT_FILE}"
 Icon "${ICON_FILE}"
 UninstallIcon "${ICON_FILE}"
 InstallDir "$PROGRAMFILES64\BreakHub"
-InstallDirRegKey HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+InstallDirRegKey HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
 SetCompressor /SOLID lzma
 ShowInstDetails show
 ShowUninstDetails show
@@ -50,8 +51,6 @@ VIAddVersionKey /LANG=2052 "FileVersion" "${PRODUCT_VERSION}"
 VIAddVersionKey /LANG=2052 "ProductVersion" "${PRODUCT_VERSION}"
 
 !define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\BreakHub.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "启动 BreakHub"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -61,13 +60,32 @@ VIAddVersionKey /LANG=2052 "ProductVersion" "${PRODUCT_VERSION}"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
 Var SkipShortcuts
+Var DeleteUserData
 
 Function .onInit
+  SetRegView 64
+  SetShellVarContext all
   ${GetOptions} $CMDLINE "/SKIPSHORTCUTS" $0
   ${If} $0 != ""
     StrCpy $SkipShortcuts "1"
   ${EndIf}
 FunctionEnd
+
+Function un.onInit
+  SetRegView 64
+  SetShellVarContext all
+FunctionEnd
+
+!macro RemoveProgramFiles
+  Delete "$INSTDIR\BreakHub.exe"
+  Delete "$INSTDIR\BreakHub-Stop.exe"
+  Delete "$INSTDIR\BreakHub-Start.exe"
+  Delete "$INSTDIR\Uninstall.exe"
+  Delete "$INSTDIR\README.txt"
+  Delete "$INSTDIR\application.yml.template"
+  RMDir /r "$INSTDIR\app"
+  RMDir /r "$INSTDIR\runtime"
+!macroend
 
 Function ValidateInstallRoot
   ClearErrors
@@ -81,8 +99,11 @@ Function ValidateInstallRoot
   validate_empty:
     IfFileExists "$INSTDIR\*.*" validate_legacy validate_valid
   validate_legacy:
+    ReadRegStr $2 HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+    StrCmp $2 "$INSTDIR" validate_legacy_files 0
     ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
     StrCmp $2 "$INSTDIR" 0 validate_invalid
+  validate_legacy_files:
     IfFileExists "$INSTDIR\BreakHub-Start.exe" 0 validate_invalid
     IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 validate_invalid
     IfFileExists "$INSTDIR\Uninstall.exe" 0 validate_invalid
@@ -122,9 +143,12 @@ Section "BreakHub" MainSection
   stop_for_upgrade_done:
 
   ClearErrors
-  RMDir /r "$INSTDIR"
+  !insertmacro RemoveProgramFiles
   IfErrors upgrade_cleanup_failed
-  IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed upgrade_cleanup_done
+  IfFileExists "$INSTDIR\BreakHub.exe" upgrade_cleanup_failed
+  IfFileExists "$INSTDIR\BreakHub-Stop.exe" upgrade_cleanup_failed
+  IfFileExists "$INSTDIR\app\*.*" upgrade_cleanup_failed
+  IfFileExists "$INSTDIR\runtime\*.*" upgrade_cleanup_failed upgrade_cleanup_done
   upgrade_cleanup_failed:
     MessageBox MB_ICONSTOP|MB_OK "旧版 BreakHub 程序文件未能清理，安装已取消。请稍后重试。" /SD IDOK
     Abort
@@ -144,19 +168,42 @@ Section "BreakHub" MainSection
     Abort
   marker_write_done:
 
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "DisplayName" "${PRODUCT_NAME}"
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "DisplayIcon" "$INSTDIR\BreakHub.exe"
-  WriteRegStr HKCU "${PRODUCT_REGISTRY_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
-  WriteRegDWORD HKCU "${PRODUCT_REGISTRY_KEY}" "NoModify" 1
-  WriteRegDWORD HKCU "${PRODUCT_REGISTRY_KEY}" "NoRepair" 1
+  IfFileExists "$INSTDIR\application.yml" configuration_ready
+    CopyFiles /SILENT "$INSTDIR\application.yml.template" "$INSTDIR\application.yml"
+    IfFileExists "$INSTDIR\application.yml" configuration_ready configuration_failed
+  configuration_failed:
+    MessageBox MB_ICONSTOP|MB_OK "无法在安装目录创建 application.yml，安装未完成。" /SD IDOK
+    Abort
+  configuration_ready:
+  CreateDirectory "$INSTDIR\data"
+  CreateDirectory "$INSTDIR\logs"
+  IfFileExists "$INSTDIR\data" data_ready state_directories_failed
+  data_ready:
+  IfFileExists "$INSTDIR\logs" logs_ready state_directories_failed
+  state_directories_failed:
+    MessageBox MB_ICONSTOP|MB_OK "无法在安装目录创建数据或日志目录，安装未完成。" /SD IDOK
+    Abort
+  logs_ready:
 
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "DisplayName" "${PRODUCT_NAME}"
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "DisplayIcon" "$INSTDIR\BreakHub.exe"
+  WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
+  WriteRegDWORD HKLM "${PRODUCT_REGISTRY_KEY}" "NoModify" 1
+  WriteRegDWORD HKLM "${PRODUCT_REGISTRY_KEY}" "NoRepair" 1
+  WriteRegStr HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub.exe" "~ RUNASADMIN"
+  WriteRegStr HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe" "~ RUNASADMIN"
+  DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
+
+  SetShellVarContext current
+  Delete "$DESKTOP\BreakHub - 启动.lnk"
+  Delete "$DESKTOP\BreakHub - 停止.lnk"
+  RMDir /r "$SMPROGRAMS\BreakHub"
+  SetShellVarContext all
   Delete "$DESKTOP\BreakHub - 停止.lnk"
   ${If} $SkipShortcuts != "1"
-    CreateDirectory "$LOCALAPPDATA\BreakHub"
-    SetOutPath "$LOCALAPPDATA\BreakHub"
     CreateDirectory "$SMPROGRAMS\BreakHub"
     CreateShortCut "$SMPROGRAMS\BreakHub\BreakHub - 启动.lnk" "$INSTDIR\BreakHub.exe" "" "$INSTDIR\BreakHub.exe"
     CreateShortCut "$SMPROGRAMS\BreakHub\BreakHub - 停止.lnk" "$INSTDIR\BreakHub-Stop.exe" "" "$INSTDIR\BreakHub-Stop.exe"
@@ -181,17 +228,43 @@ Section "Uninstall"
     ${EndIf}
   stop_for_uninstall_done:
 
+  StrCpy $DeleteUserData "0"
+  IfSilent uninstall_preserve_data
+  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "是否同时删除 BreakHub 的 application.yml、data 和 logs？选择“否”将保留这些数据，便于以后重新安装。" IDYES uninstall_delete_data IDNO uninstall_preserve_data
+  uninstall_delete_data:
+    StrCpy $DeleteUserData "1"
+  uninstall_preserve_data:
+
   ClearErrors
-  RMDir /r "$INSTDIR"
+  !insertmacro RemoveProgramFiles
   IfErrors uninstall_cleanup_failed
-  IfFileExists "$INSTDIR\*.*" uninstall_cleanup_failed uninstall_cleanup_done
+  IfFileExists "$INSTDIR\BreakHub.exe" uninstall_cleanup_failed
+  IfFileExists "$INSTDIR\BreakHub-Stop.exe" uninstall_cleanup_failed
+  IfFileExists "$INSTDIR\app\*.*" uninstall_cleanup_failed
+  IfFileExists "$INSTDIR\runtime\*.*" uninstall_cleanup_failed uninstall_cleanup_done
   uninstall_cleanup_failed:
     MessageBox MB_ICONSTOP|MB_OK "BreakHub 程序文件未能删除，卸载未完成。请稍后重试。" /SD IDOK
     Abort
   uninstall_cleanup_done:
 
+  StrCmp $DeleteUserData "1" 0 uninstall_data_done
+    Delete "$INSTDIR\application.yml"
+    RMDir /r "$INSTDIR\data"
+    RMDir /r "$INSTDIR\logs"
+    Delete "$INSTDIR\${INSTALL_MARKER_FILE}"
+    RMDir "$INSTDIR"
+  uninstall_data_done:
+
+  SetShellVarContext current
   Delete "$DESKTOP\BreakHub - 启动.lnk"
   Delete "$DESKTOP\BreakHub - 停止.lnk"
   RMDir /r "$SMPROGRAMS\BreakHub"
+  SetShellVarContext all
+  Delete "$DESKTOP\BreakHub - 启动.lnk"
+  Delete "$DESKTOP\BreakHub - 停止.lnk"
+  RMDir /r "$SMPROGRAMS\BreakHub"
+  DeleteRegValue HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub.exe"
+  DeleteRegValue HKLM "${APP_COMPATIBILITY_KEY}" "$INSTDIR\BreakHub-Stop.exe"
+  DeleteRegKey HKLM "${PRODUCT_REGISTRY_KEY}"
   DeleteRegKey HKCU "${PRODUCT_REGISTRY_KEY}"
 SectionEnd

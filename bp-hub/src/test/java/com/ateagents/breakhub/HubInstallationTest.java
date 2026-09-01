@@ -9,7 +9,6 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -18,42 +17,37 @@ import org.junit.jupiter.api.Test;
 class HubInstallationTest {
 
     @Test
-    void usesLocalApplicationDataForMutableProductState() {
-        Path state = HubInstallation.stateDirectory(
-                Map.of("LOCALAPPDATA", "C:\\Users\\tester\\AppData\\Local"),
-                "C:\\Users\\tester");
+    void keepsLifecycleStateUnderTheInstallationDataDirectory() {
+        Path installation = Path.of("C:\\Program Files\\BreakHub");
+        Path state = HubInstallation.stateDirectory(installation);
 
-        assertThat(state).isEqualTo(Path.of(
-                "C:\\Users\\tester\\AppData\\Local", "BreakHub"));
+        assertThat(state).isEqualTo(installation.resolve("data").resolve(".runtime"));
     }
 
     @Test
     void createsConfigurationFromTheInstalledTemplateOnlyOnce() throws Exception {
         Path directory = Files.createTempDirectory("breakhub-installation-test-");
         Path installation = directory.resolve("application");
-        Path state = directory.resolve("state");
         Files.createDirectories(installation);
         Files.writeString(installation.resolve("application.yml.template"), """
                 breakhub:
-                  data-directory: "@BREAKHUB_HOME@/data"
+                  data-directory: "${breakhub.home}/data"
                 logging:
                   file:
-                    name: "@BREAKHUB_HOME@/logs/breakhub.log"
+                    name: "${breakhub.home}/logs/breakhub.log"
                 """, StandardCharsets.UTF_8);
 
-        Path config = HubInstallation.initializeConfiguration(installation, state);
+        Path config = HubInstallation.initializeConfiguration(installation);
 
-        String normalizedHome = state.toAbsolutePath().normalize().toString().replace("\\", "/");
-        assertThat(config).isEqualTo(state.resolve("application.yml"));
+        assertThat(config).isEqualTo(installation.resolve("application.yml"));
         assertThat(Files.readString(config, StandardCharsets.UTF_8))
-                .contains("data-directory: \"" + normalizedHome + "/data\"")
-                .contains("name: \"" + normalizedHome + "/logs/breakhub.log\"")
-                .doesNotContain("@BREAKHUB_HOME@");
-        assertThat(state.resolve("data")).isDirectory();
-        assertThat(state.resolve("logs")).isDirectory();
+                .contains("data-directory: \"${breakhub.home}/data\"")
+                .contains("name: \"${breakhub.home}/logs/breakhub.log\"");
+        assertThat(installation.resolve("data")).isDirectory();
+        assertThat(installation.resolve("logs")).isDirectory();
 
         Files.writeString(config, "user-edited: true\n", StandardCharsets.UTF_8);
-        HubInstallation.initializeConfiguration(installation, state);
+        HubInstallation.initializeConfiguration(installation);
 
         assertThat(Files.readString(config, StandardCharsets.UTF_8))
                 .isEqualTo("user-edited: true\n");
@@ -136,6 +130,38 @@ class HubInstallationTest {
             control.publishBrowserUri(browserUri);
 
             assertThat(exposed.get(5, TimeUnit.SECONDS)).isEqualTo(browserUri);
+        }
+    }
+
+    @Test
+    void ignoresAStaleBrowserAddressWhileAReplacementHubStarts() throws Exception {
+        Path state = Files.createTempDirectory("breakhub-stale-browser-address-test-");
+        URI staleUri = URI.create("http://127.0.0.1:18000/");
+        URI currentUri = URI.create("http://127.0.0.1:18621/");
+        Files.writeString(state.resolve("run.properties"), """
+                pid=9223372036854775807
+                browser-uri=http://127.0.0.1:18000/
+                """, StandardCharsets.UTF_8);
+
+        try (FileChannel channel = FileChannel.open(
+                    state.resolve("hub.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock ignored = channel.lock()) {
+            CompletableFuture<URI> exposed = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return HubControl.awaitBrowserUri(state);
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            });
+
+            Thread.sleep(100);
+            assertThat(exposed).isNotDone();
+            try (HubControl control = HubControl.open(state)) {
+                control.publishBrowserUri(currentUri);
+                assertThat(exposed.get(5, TimeUnit.SECONDS))
+                        .isEqualTo(currentUri)
+                        .isNotEqualTo(staleUri);
+            }
         }
     }
 }

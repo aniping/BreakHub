@@ -44,26 +44,40 @@ class HubInstallerContractTest(unittest.TestCase):
             'Icon "${ICON_FILE}"',
             '!define MUI_ICON "${ICON_FILE}"',
             '!define MUI_UNICON "${ICON_FILE}"',
+            "SetShellVarContext all",
+            r'CreateDirectory "$INSTDIR\data"',
+            r'CreateDirectory "$INSTDIR\logs"',
+            r'$INSTDIR\application.yml',
+            '!define APP_COMPATIBILITY_KEY',
+            r'"$INSTDIR\BreakHub.exe" "~ RUNASADMIN"',
+            r'"$INSTDIR\BreakHub-Stop.exe" "~ RUNASADMIN"',
+            "SetRegView 64",
+            "IfSilent uninstall_preserve_data",
+            "MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2",
         ):
             self.assertIn(required, script)
-        self.assertNotIn(r'RMDir /r "$LOCALAPPDATA\BreakHub"', script)
-        self.assertNotIn(r'$LOCALAPPDATA\Programs\BreakHub', script)
+        self.assertNotIn("$LOCALAPPDATA", script)
+        self.assertNotIn(r'RMDir /r "$INSTDIR"', script)
         self.assertIn('!insertmacro MUI_PAGE_DIRECTORY', script)
-        self.assertIn('InstallDirRegKey HKCU', script)
+        self.assertIn('InstallDirRegKey HKLM', script)
+        self.assertIn('WriteRegStr HKLM "${PRODUCT_REGISTRY_KEY}"', script)
+        self.assertNotIn('!define MUI_FINISHPAGE_RUN ', script)
+        self.assertNotIn(r'CreateDirectory "$LOCALAPPDATA\BreakHub"', script)
         self.assertNotIn(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"', script)
         self.assertIn('!define INSTALL_MARKER_FILE ".breakhub-install-root"', script)
         self.assertIn('Call ValidateInstallRoot', script)
         self.assertIn('Call un.ValidateInstallRoot', script)
         self.assertIn(r'IfFileExists "$INSTDIR\BreakHub-Start.exe"', script)
         self.assertIn('ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"', script)
-        self.assertIn(r'IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed', script)
+        self.assertIn(r'IfFileExists "$INSTDIR\app\*.*" upgrade_cleanup_failed', script)
+        self.assertIn(r'IfFileExists "$INSTDIR\runtime\*.*" upgrade_cleanup_failed', script)
         self.assertNotIn(
             r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
         )
         self.assertGreaterEqual(
             script.count(r'Delete "$DESKTOP\BreakHub - 停止.lnk"'), 2
         )
-        self.assertEqual(1, script.count("BreakHub-Start.exe"))
+        self.assertEqual(2, script.count("BreakHub-Start.exe"))
         self.assertNotIn("breakhub-mcp", script.lower())
 
     def test_main_launcher_is_named_breakhub(self) -> None:
@@ -130,12 +144,13 @@ class HubInstallerContractTest(unittest.TestCase):
             with self.assertRaisesRegex(TaskError, "Java 17"):
                 _find_jdk(str(directory))
 
-    def test_installer_configuration_uses_a_runtime_home_placeholder(self) -> None:
+    def test_installer_configuration_uses_the_installation_home_property(self) -> None:
         template = (
             REPO_ROOT / "bp-hub" / "installer" / "application.yml.template"
         ).read_text(encoding="utf-8")
-        self.assertIn("@BREAKHUB_HOME@/data", template)
-        self.assertIn("@BREAKHUB_HOME@/logs/breakhub.log", template)
+        self.assertIn("${breakhub.home}/data", template)
+        self.assertIn("${breakhub.home}/logs/breakhub.log", template)
+        self.assertNotIn("@BREAKHUB_HOME@", template)
 
     def test_build_directory_cleanup_handles_read_only_jpackage_files(self) -> None:
         (REPO_ROOT / "build").mkdir(exist_ok=True)

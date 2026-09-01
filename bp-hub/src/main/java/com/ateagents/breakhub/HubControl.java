@@ -14,6 +14,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -45,7 +46,6 @@ final class HubControl implements AutoCloseable {
     static HubControl open(Path state) throws IOException {
         Files.createDirectories(state);
         ServerSocket server = new ServerSocket();
-        Path temporary = null;
         try {
             server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 4);
             String token = randomToken();
@@ -54,18 +54,10 @@ final class HubControl implements AutoCloseable {
             properties.setProperty("pid", Long.toString(ProcessHandle.current().pid()));
             properties.setProperty("port", Integer.toString(server.getLocalPort()));
             properties.setProperty("token", token);
-            temporary = Files.createTempFile(state, "run-", ".properties.tmp");
-            try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-                properties.store(writer, "BreakHub local lifecycle control");
-            }
-            Files.move(
-                    temporary,
-                    controlFile,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
+            writeProperties(controlFile, properties);
             return new HubControl(server, controlFile, token);
         } catch (IOException | RuntimeException failure) {
-            closeAfterOpenFailure(server, temporary, failure);
+            closeAfterOpenFailure(server, failure);
             throw failure;
         }
     }
@@ -96,19 +88,7 @@ final class HubControl implements AutoCloseable {
     void publishBrowserUri(URI browserUri) throws IOException {
         Properties properties = readProperties(controlFile);
         properties.setProperty(BROWSER_URI_PROPERTY, browserUri.toASCIIString());
-        Path temporary = Files.createTempFile(controlFile.getParent(), "run-", ".properties.tmp");
-        try {
-            try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-                properties.store(writer, "BreakHub local lifecycle control");
-            }
-            Files.move(
-                    temporary,
-                    controlFile,
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-        } finally {
-            Files.deleteIfExists(temporary);
-        }
+        writeProperties(controlFile, properties);
     }
 
     static URI awaitBrowserUri(Path state) throws IOException, InterruptedException {
@@ -116,8 +96,9 @@ final class HubControl implements AutoCloseable {
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
         while (System.nanoTime() < deadline) {
             if (Files.isRegularFile(controlFile)) {
-                String value = readProperties(controlFile).getProperty(BROWSER_URI_PROPERTY);
-                if (value != null && !value.isBlank()) {
+                Properties properties = readProperties(controlFile);
+                String value = properties.getProperty(BROWSER_URI_PROPERTY);
+                if (value != null && !value.isBlank() && endpointProcessIsAlive(properties)) {
                     return parseBrowserUri(value);
                 }
             }
@@ -197,6 +178,34 @@ final class HubControl implements AutoCloseable {
         return properties;
     }
 
+    private static void writeProperties(Path path, Properties properties) throws IOException {
+        Path temporary = Files.createTempFile(path.getParent(), "run-", ".properties.tmp");
+        try {
+            try (BufferedWriter writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
+                properties.store(writer, "BreakHub local lifecycle control");
+            }
+            try {
+                Files.move(
+                        temporary,
+                        path,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static boolean endpointProcessIsAlive(Properties properties) {
+        try {
+            return processIsAlive(Long.parseLong(properties.getProperty("pid")));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
     private static URI parseBrowserUri(String value) throws IOException {
         try {
             URI uri = URI.create(value);
@@ -253,15 +262,7 @@ final class HubControl implements AutoCloseable {
         }
     }
 
-    private static void closeAfterOpenFailure(
-            ServerSocket server, Path temporary, Throwable failure) {
-        if (temporary != null) {
-            try {
-                Files.deleteIfExists(temporary);
-            } catch (IOException cleanupFailure) {
-                failure.addSuppressed(cleanupFailure);
-            }
-        }
+    private static void closeAfterOpenFailure(ServerSocket server, Throwable failure) {
         try {
             server.close();
         } catch (IOException cleanupFailure) {
