@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import stat
 import sys
 import tempfile
@@ -52,11 +53,16 @@ class HubInstallerContractTest(unittest.TestCase):
         self.assertIn('!define INSTALL_MARKER_FILE ".breakhub-install-root"', script)
         self.assertIn('Call ValidateInstallRoot', script)
         self.assertIn('Call un.ValidateInstallRoot', script)
+        self.assertIn(r'IfFileExists "$INSTDIR\BreakHub-Start.exe"', script)
+        self.assertIn('ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"', script)
         self.assertIn(r'IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed', script)
         self.assertNotIn(
             r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
         )
-        self.assertNotIn("BreakHub-Start.exe", script)
+        self.assertGreaterEqual(
+            script.count(r'Delete "$DESKTOP\BreakHub - 停止.lnk"'), 2
+        )
+        self.assertEqual(1, script.count("BreakHub-Start.exe"))
         self.assertNotIn("breakhub-mcp", script.lower())
 
     def test_main_launcher_is_named_breakhub(self) -> None:
@@ -76,11 +82,39 @@ class HubInstallerContractTest(unittest.TestCase):
                 bundled.writestr("jdk-17/release", 'JAVA_VERSION="17.0.20"\n')
                 bundled.writestr("jdk-17/bin/jpackage.exe", b"jpackage")
                 bundled.writestr("jdk-17/bin/jlink.exe", b"jlink")
+            archive.with_suffix(".zip.sha256").write_text(
+                hashlib.sha256(archive.read_bytes()).hexdigest(), encoding="ascii"
+            )
 
             jdk = _extract_jdk_archive(archive, destination)
 
             self.assertTrue(jdk.samefile(destination / "jdk-17"))
             self.assertTrue((jdk / "bin" / "jpackage.exe").is_file())
+
+    def test_rejects_a_portable_jdk_without_a_checksum_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_value:
+            directory = Path(directory_value)
+            archive = directory / "temurin-17.zip"
+            destination = directory / "extracted"
+            with zipfile.ZipFile(archive, "w") as bundled:
+                bundled.writestr("jdk-17/release", 'JAVA_VERSION="17.0.20"\n')
+
+            with self.assertRaisesRegex(TaskError, "checksum file"):
+                _extract_jdk_archive(archive, destination)
+
+    def test_rejects_a_malformed_portable_jdk_checksum(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_value:
+            directory = Path(directory_value)
+            archive = directory / "temurin-17.zip"
+            destination = directory / "extracted"
+            with zipfile.ZipFile(archive, "w") as bundled:
+                bundled.writestr("jdk-17/release", 'JAVA_VERSION="17.0.20"\n')
+            archive.with_suffix(".zip.sha256").write_text(
+                "not-a-sha256", encoding="ascii"
+            )
+
+            with self.assertRaisesRegex(TaskError, "checksum file is invalid"):
+                _extract_jdk_archive(archive, destination)
 
     def test_builder_rejects_a_non_java_17_jdk(self) -> None:
         with tempfile.TemporaryDirectory() as directory_value:

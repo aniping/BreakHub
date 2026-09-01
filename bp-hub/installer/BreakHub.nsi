@@ -79,7 +79,14 @@ Function ValidateInstallRoot
     FileClose $0
     StrCmp $1 "${INSTALL_MARKER_VALUE}" validate_valid validate_invalid
   validate_empty:
-    IfFileExists "$INSTDIR\*.*" validate_invalid validate_valid
+    IfFileExists "$INSTDIR\*.*" validate_legacy validate_valid
+  validate_legacy:
+    ReadRegStr $2 HKCU "${PRODUCT_REGISTRY_KEY}" "InstallLocation"
+    StrCmp $2 "$INSTDIR" 0 validate_invalid
+    IfFileExists "$INSTDIR\BreakHub-Start.exe" 0 validate_invalid
+    IfFileExists "$INSTDIR\BreakHub-Stop.exe" 0 validate_invalid
+    IfFileExists "$INSTDIR\Uninstall.exe" 0 validate_invalid
+    IfFileExists "$INSTDIR\runtime\release" validate_valid validate_invalid
   validate_invalid:
     SetErrors
   validate_valid:
@@ -146,6 +153,7 @@ Section "BreakHub" MainSection
   WriteRegDWORD HKCU "${PRODUCT_REGISTRY_KEY}" "NoModify" 1
   WriteRegDWORD HKCU "${PRODUCT_REGISTRY_KEY}" "NoRepair" 1
 
+  Delete "$DESKTOP\BreakHub - 停止.lnk"
   ${If} $SkipShortcuts != "1"
     CreateDirectory "$LOCALAPPDATA\BreakHub"
     SetOutPath "$LOCALAPPDATA\BreakHub"

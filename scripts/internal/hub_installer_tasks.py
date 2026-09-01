@@ -127,12 +127,16 @@ def _verify_archive_checksum(archive: Path) -> str:
             digest.update(chunk)
     actual = digest.hexdigest()
     checksum_file = archive.with_suffix(archive.suffix + ".sha256")
-    if checksum_file.is_file():
-        expected = checksum_file.read_text(encoding="ascii").split()[0].lower()
-        if expected != actual:
-            raise TaskError(
-                f"Portable JDK checksum mismatch: expected {expected}, got {actual}."
-            )
+    if not checksum_file.is_file():
+        raise TaskError(f"Portable JDK checksum file is missing: {checksum_file}")
+    fields = checksum_file.read_text(encoding="ascii").split()
+    if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+        raise TaskError(f"Portable JDK checksum file is invalid: {checksum_file}")
+    expected = fields[0].lower()
+    if expected != actual:
+        raise TaskError(
+            f"Portable JDK checksum mismatch: expected {expected}, got {actual}."
+        )
     return actual
 
 
