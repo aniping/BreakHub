@@ -1,10 +1,11 @@
 BreakHub Windows 安装说明
 ========================
 
-启动：双击“BreakHub - 启动”快捷方式，或运行 BreakHub-Start.exe。
+启动：双击“BreakHub - 启动”快捷方式，或运行 BreakHub.exe。
 停止：双击“BreakHub - 停止”快捷方式，或运行 BreakHub-Stop.exe。
 
-安装包已经集成 Java Runtime，用户电脑不需要安装 JDK 或 JRE。
+安装包已经集成私有 Java Runtime，用户电脑不需要安装 JDK 或 JRE。
+Runtime 位于用户选择的 BreakHub 安装目录中，不修改系统 Java、JAVA_HOME 或 PATH。
 
 配置文件：%LOCALAPPDATA%\BreakHub\application.yml
 数据目录：%LOCALAPPDATA%\BreakHub\data

@@ -61,7 +61,7 @@ class HubInstallationTest {
     @Test
     void resolvesTheInstallationBesideTheJpackageLauncher() {
         Path installation = HubInstallation.installationDirectory(
-                "C:\\Users\\tester\\AppData\\Local\\Programs\\BreakHub\\BreakHub-Start.exe");
+                "C:\\Users\\tester\\AppData\\Local\\Programs\\BreakHub\\BreakHub.exe");
 
         assertThat(installation).isEqualTo(Path.of(
                 "C:\\Users\\tester\\AppData\\Local\\Programs\\BreakHub"));

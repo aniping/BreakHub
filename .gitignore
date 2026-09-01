@@ -21,5 +21,6 @@ bp-hub/web/dist/
 # Build and release output
 build/
 dist/
+vendor/jdk/*.zip
 bp-mcp/build/
 bp-mcp/dist/

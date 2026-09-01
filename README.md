@@ -21,6 +21,7 @@ BreakHub 是一个可独立部署的断点调试产品。业务进程通过探�
 - Node.js 20+、npm
 - Conda 环境 `breakhub`，Python 3.12
 - 生成 Windows 安装包时需要带 `jpackage` 的 JDK 17 和 NSIS 3；这些只属于构建机依赖
+- `vendor/jdk/` 可携带一个 Temurin 17 Windows x64 ZIP；打包脚本会优先自动解压使用，复制工程到其他构建机时无需另装 JDK
 
 Python 环境使用 `requirements.txt` 安装：
 
@@ -43,7 +44,7 @@ python -m pip install -e .\bp-mcp --no-deps
 
 `package.cmd` 生成三个正式发布分类：`dist/hub/`、`dist/java-probe/` 和 `dist/breakpoint-debugging/`。Hub 目录包含集成 Java Runtime 的 `BreakHub-Setup-0.1.0.exe`，以及供开发联调的 JAR、`application.yml` 与 `start.cmd`；Java Probe 目录包含本地 Maven 安装命令和用户手册；Breakpoint Debugging 目录同时包含 OpenCode Skill ZIP、独立管理 EXE、用户手册，以及可由 AteAgent 直接上传的 `breakpoint-debugging-ateagent-0.1.0.zip`。
 
-只构建 Hub 安装包时运行 `bp-hub\scripts\build-installer.cmd`。安装后使用独立的 `BreakHub-Start.exe` 和 `BreakHub-Stop.exe`，终端用户不需要安装 JDK。MCP 不进入 Hub 安装包，它仍由 Agent 侧的 OpenCode Skill 或 AteAgent 集成包管理。
+只构建 Hub 安装包时运行 `bp-hub\scripts\build-installer.cmd`。安装目录由用户选择，内置 Java 17 Runtime 只放在该目录中，不安装系统 JDK/JRE，也不修改 `JAVA_HOME` 或 `PATH`。安装后使用独立的 `BreakHub.exe` 和 `BreakHub-Stop.exe`。MCP 不进入 Hub 安装包，它仍由 Agent 侧的 OpenCode Skill 或 AteAgent 集成包管理。
 
 `package-java-demo.cmd` 独立编译 Probe、测试 Java Demo，并生成测试辅助目录 `dist/java-demo/`；该 Demo 不属于正式发布物。
 

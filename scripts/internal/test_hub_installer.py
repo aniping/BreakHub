@@ -4,6 +4,7 @@ import stat
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +12,12 @@ INTERNAL_ROOT = REPO_ROOT / "scripts" / "internal"
 if str(INTERNAL_ROOT) not in sys.path:
     sys.path.insert(0, str(INTERNAL_ROOT))
 
-from hub_installer_tasks import RUNTIME_MODULES, _find_jdk  # noqa: E402
+from hub_installer_tasks import (  # noqa: E402
+    LAUNCHER_NAME,
+    RUNTIME_MODULES,
+    _extract_jdk_archive,
+    _find_jdk,
+)
 from task_support import TaskError, reset_directory  # noqa: E402
 
 
@@ -30,19 +36,51 @@ class HubInstallerContractTest(unittest.TestCase):
         for required in (
             "RequestExecutionLevel user",
             r'$LOCALAPPDATA\Programs\BreakHub',
-            "BreakHub-Start.exe",
+            "BreakHub.exe",
             "BreakHub-Stop.exe",
             "CreateShortCut",
             "WriteUninstaller",
+            'Icon "${ICON_FILE}"',
+            '!define MUI_ICON "${ICON_FILE}"',
+            '!define MUI_UNICON "${ICON_FILE}"',
         ):
             self.assertIn(required, script)
         self.assertNotIn(r'RMDir /r "$LOCALAPPDATA\BreakHub"', script)
-        self.assertNotIn('!insertmacro MUI_PAGE_DIRECTORY', script)
-        self.assertGreaterEqual(
-            script.count(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"'), 3
-        )
+        self.assertIn('!insertmacro MUI_PAGE_DIRECTORY', script)
+        self.assertIn('InstallDirRegKey HKCU', script)
+        self.assertNotIn(r'StrCpy $INSTDIR "$LOCALAPPDATA\Programs\BreakHub"', script)
+        self.assertIn('!define INSTALL_MARKER_FILE ".breakhub-install-root"', script)
+        self.assertIn('Call ValidateInstallRoot', script)
+        self.assertIn('Call un.ValidateInstallRoot', script)
         self.assertIn(r'IfFileExists "$INSTDIR\*.*" upgrade_cleanup_failed', script)
+        self.assertNotIn(
+            r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
+        )
+        self.assertNotIn("BreakHub-Start.exe", script)
         self.assertNotIn("breakhub-mcp", script.lower())
+
+    def test_main_launcher_is_named_breakhub(self) -> None:
+        self.assertEqual("BreakHub", LAUNCHER_NAME)
+
+    def test_breakhub_icon_assets_are_present(self) -> None:
+        installer = REPO_ROOT / "bp-hub" / "installer"
+        self.assertTrue((installer / "breakhub.png").is_file())
+        self.assertEqual(b"\x00\x00\x01\x00", (installer / "breakhub.ico").read_bytes()[:4])
+
+    def test_extracts_a_portable_java_17_jdk_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_value:
+            directory = Path(directory_value)
+            archive = directory / "temurin-17.zip"
+            destination = directory / "extracted"
+            with zipfile.ZipFile(archive, "w") as bundled:
+                bundled.writestr("jdk-17/release", 'JAVA_VERSION="17.0.20"\n')
+                bundled.writestr("jdk-17/bin/jpackage.exe", b"jpackage")
+                bundled.writestr("jdk-17/bin/jlink.exe", b"jlink")
+
+            jdk = _extract_jdk_archive(archive, destination)
+
+            self.assertTrue(jdk.samefile(destination / "jdk-17"))
+            self.assertTrue((jdk / "bin" / "jpackage.exe").is_file())
 
     def test_builder_rejects_a_non_java_17_jdk(self) -> None:
         with tempfile.TemporaryDirectory() as directory_value:
@@ -70,7 +108,7 @@ class HubInstallerContractTest(unittest.TestCase):
             parent = Path(parent_value)
             target = parent / "app-image"
             target.mkdir()
-            executable = target / "BreakHub-Start.exe"
+            executable = target / "BreakHub.exe"
             executable.write_bytes(b"launcher")
             executable.chmod(stat.S_IREAD)
 
