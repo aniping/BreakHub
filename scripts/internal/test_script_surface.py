@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import subprocess
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,11 +27,7 @@ class ScriptSurfaceTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        tracked = [
-            line
-            for line in completed.stdout.splitlines()
-            if line and (REPO_ROOT / line).is_file()
-        ]
+        tracked = [line for line in completed.stdout.splitlines() if line]
         self.assertEqual([], tracked)
 
     def test_scripts_root_exposes_only_four_command_files(self) -> None:
