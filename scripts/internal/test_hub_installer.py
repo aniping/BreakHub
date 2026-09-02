@@ -101,6 +101,12 @@ class HubInstallerContractTest(unittest.TestCase):
         self.assertNotIn(
             r'CreateShortCut "$DESKTOP\BreakHub - 停止.lnk"', script
         )
+        self.assertEqual(
+            2,
+            script.count(
+                "System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'"
+            ),
+        )
         self.assertGreaterEqual(
             script.count(r'Delete "$DESKTOP\BreakHub - 停止.lnk"'), 2
         )

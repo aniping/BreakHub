@@ -306,6 +306,7 @@ Section "BreakHub" MainSection
     CreateShortCut "$SMPROGRAMS\BreakHub\卸载 BreakHub.lnk" "$INSTDIR\Uninstall.exe"
     CreateShortCut "$DESKTOP\BreakHub - 启动.lnk" "$INSTDIR\BreakHub.exe" "" "$INSTDIR\BreakHub.exe"
   ${EndIf}
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
 
 Section "Uninstall"
@@ -402,4 +403,5 @@ Section "Uninstall"
     Delete "$INSTDIR\${INSTALL_MARKER_FILE}"
     RMDir "$INSTDIR"
   uninstall_complete:
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
