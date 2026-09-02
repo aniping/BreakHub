@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import stat
+import struct
 import sys
 import tempfile
 import unittest
@@ -111,8 +112,27 @@ class HubInstallerContractTest(unittest.TestCase):
 
     def test_breakhub_icon_assets_are_present(self) -> None:
         installer = REPO_ROOT / "bp-hub" / "installer"
-        self.assertTrue((installer / "breakhub.png").is_file())
-        self.assertEqual(b"\x00\x00\x01\x00", (installer / "breakhub.ico").read_bytes()[:4])
+        png = (installer / "breakhub.png").read_bytes()
+        ico = (installer / "breakhub.ico").read_bytes()
+
+        self.assertEqual(
+            "c78554ef0b41323c7b0bd81c2b1cea062658b8e776838457a0ccaac5d63b4730",
+            hashlib.sha256(png).hexdigest(),
+        )
+        self.assertEqual(
+            "043e3172bba993fab80820f36ae36ab48a9172996f39f7973cfc21ede3179bee",
+            hashlib.sha256(ico).hexdigest(),
+        )
+        self.assertEqual(b"\x00\x00\x01\x00", ico[:4])
+        image_count = struct.unpack_from("<H", ico, 4)[0]
+        dimensions = []
+        for index in range(image_count):
+            width, height = struct.unpack_from("BB", ico, 6 + index * 16)
+            dimensions.append((width or 256, height or 256))
+        self.assertEqual(
+            [(size, size) for size in (16, 20, 24, 32, 40, 48, 64, 128, 256)],
+            dimensions,
+        )
 
     def test_extracts_a_portable_java_17_jdk_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory_value:
