@@ -103,6 +103,7 @@ class ProductBaselineApiTest {
                 .andExpect(jsonPath("$.limits.control_lease_timeout_seconds").value(1800))
                 .andExpect(jsonPath("$.limits.pause_timeout_seconds").value(1500))
                 .andExpect(jsonPath("$.limits.max_payload_bytes").value(16777216))
+                .andExpect(jsonPath("$.limits.max_interaction_records").value(18000))
                 .andExpect(jsonPath("$.health.database").value("healthy"))
                 .andReturn();
 

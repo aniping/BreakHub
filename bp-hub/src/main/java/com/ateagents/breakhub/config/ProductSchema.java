@@ -135,6 +135,10 @@ public class ProductSchema implements InitializingBean {
                 CREATE INDEX IF NOT EXISTS idx_product_interaction_interface_seen
                 ON product_interaction(session_id, object_name, command_name, before_at DESC)
                 """);
+        jdbc.execute("""
+                CREATE INDEX IF NOT EXISTS idx_product_interaction_retention_order
+                ON product_interaction(lifecycle, rtrim(before_at, 'Z'))
+                """);
     }
 
     private void ensureBreakpointColumn(String name, String definition) {

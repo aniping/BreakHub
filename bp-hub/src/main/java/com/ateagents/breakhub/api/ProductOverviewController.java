@@ -96,7 +96,8 @@ public class ProductOverviewController {
                 "limits", Map.of(
                         "control_lease_timeout_seconds", properties.controlLease().timeout().toSeconds(),
                         "pause_timeout_seconds", properties.interaction().pauseTimeout().toSeconds(),
-                        "max_payload_bytes", properties.interaction().maxPayloadSize().toBytes()),
+                        "max_payload_bytes", properties.interaction().maxPayloadSize().toBytes(),
+                        "max_interaction_records", properties.interaction().maxRecords()),
                 "storage", Map.of(
                         "data_directory", properties.dataDirectory()),
                 "health", Map.of(

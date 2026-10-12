@@ -1995,6 +1995,8 @@ onUnmounted(() => {
               <div><dt>控制租约</dt><dd>{{ settings.limits.control_lease_timeout_seconds / 60 }} 分钟</dd></div>
               <div><dt>Pause 超时</dt><dd>{{ settings.limits.pause_timeout_seconds / 60 }} 分钟</dd></div>
               <div><dt>Payload 上限</dt><dd>{{ settings.limits.max_payload_bytes / 1024 / 1024 }} MB</dd></div>
+              <div><dt>调用记录上限</dt><dd>{{ settings.limits.max_interaction_records }} 条（本机 Session 合计）</dd></div>
+              <div><dt>自动清理</dt><dd>超限按调用时间删除最老的已完成未命中记录；命中和执行中记录保留，总数可能超过上限。</dd></div>
               <div><dt>配置来源</dt><dd>{{ settings.configuration_source }}</dd></div>
             </dl>
           </article>

@@ -37,6 +37,7 @@ public class InteractionObservationService {
     private final BreakpointService breakpoints;
     private final PauseService pauses;
     private final InteractionFieldSchema fieldSchemas;
+    private final InteractionRetentionService retention;
     private final long maxPayloadBytes;
     private final TransactionTemplate transactions;
 
@@ -48,6 +49,7 @@ public class InteractionObservationService {
             BreakpointService breakpoints,
             PauseService pauses,
             InteractionFieldSchema fieldSchemas,
+            InteractionRetentionService retention,
             ProductProperties properties,
             PlatformTransactionManager transactionManager) {
         this.jdbc = jdbc;
@@ -57,6 +59,7 @@ public class InteractionObservationService {
         this.breakpoints = breakpoints;
         this.pauses = pauses;
         this.fieldSchemas = fieldSchemas;
+        this.retention = retention;
         this.maxPayloadBytes = properties.interaction().maxPayloadSize().toBytes();
         this.transactions = new TransactionTemplate(transactionManager);
     }
@@ -131,6 +134,7 @@ public class InteractionObservationService {
         if (waitRequired) {
             pauses.create(active.sessionId(), interactionId, "before", breakpointSnapshots, params, observedAt);
         }
+        retention.prune();
         return beforeResult(interactionId, "created", true, waitRequired, null);
     }
 
@@ -178,6 +182,7 @@ public class InteractionObservationService {
         if (waitRequired) {
             pauses.create(interaction.sessionId(), interactionId, "after", breakpointSnapshots, result, observedAt);
         }
+        retention.prune();
         return afterResult(interactionId, "completed", waitRequired);
     }
 

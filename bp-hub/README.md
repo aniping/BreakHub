@@ -17,6 +17,7 @@ BreakHub 是可独立部署的装备调试产品。当前产品只有一个 Java
 - 同一 Pause 可以多次累积注入并保留有序审计；只有显式继续会把当前有效内容交给业务，停止、释放、租约失效、产品关闭或 Pause 超时都会丢弃待提交注入并返回原始内容。产品启动时还会把 Current Session 的崩溃遗留 Pause 以 `product_restart` 原因安全释放，旧记录只保留为历史，不能再勾选、注入或继续。
 - Web 使用浅色“概览 + 接口列表 + 断点规则 + 调用记录 + 会话列表 + 设置”工作台；断点编辑器由用户明确选择一条参考调用，params 与 result 字段证据都只读取该 Interaction，运行中的调用会明确标记 result 证据不可用。参考调用找不到字段时只显示“未验证条件”告警，不阻止保存，也不会把验证状态写入断点。调用记录主页面按 100 条分页并在服务端筛选，列表只读取轻量摘要；点击记录或选择参考调用后才按需读取完整 Payload、阶段时间线、命中快照、注入与释放审计，新 Pause 不会自动打开、替换当前详情或自动勾选。
 - 调用记录中只有当前活动且没有待提交注入的 Pause 可勾选；“继续所选”会先原子校验 Current Session、控制权、活动阶段和注入状态，再只继续明确勾选项。含待提交注入的记录必须打开详情复核。
+- 本机 Session 的调用记录合计默认保留 18000 条；超限按首次调用时间从旧到新自动删除已完成且从未命中断点的记录。命中过断点的记录（包括已继续、超时、安全释放及规则已删除的历史）和执行中的调用始终保留，因此这是软上限；导入的 Session 归档不参与计数或清理。
 - 单条继续是幂等操作；供其他调用方使用的“继续全部”接口仍不接受 ID 列表，只原子提交命令开始时 Current Session 的 Pause 快照。
 - Web 与 Gateway 通过具体控制实例排他控制调试；首次成功写操作自动取得控制，不暴露租约 token。
 - 开始调试会先向真实 Java Demo 建立 Reporting Lease，只有完整 ACK 有效后才提交本地调试状态；产品每 10 秒固定延迟续签，单次请求硬超时为 5 秒，上一请求完成、取消或超时前不会重叠续签。Reporting 与 Control 使用独立的本地到期调度资源，网络黑洞不会占用或推迟二者的到期线程。续签失败会保留最后确认和 30 秒服务端截止时间并显示降级；到期时先在本地转为空闲、释放 Pause、丢弃待提交注入，再尽力停止远端，但不会释放独立的 Control Lease。显式停止、释放、Control Lease 失效、Web 退出和产品关闭同样采用本地优先收尾，远端失败不会回滚本地结果。即使 Pause 持久化清理失败，结束路径也只认领当前调试代次一次并继续收敛本地状态与 Reporting Lease；显式操作会在收尾后返回原错误，Reporting 到期仍保留 Control，而 Control 到期仍会清除 Control。
@@ -37,6 +38,18 @@ Copy-Item application.example.yml application.yml
 `application.yml` 被 Git 忽略，应使用文件权限保护。装备身份、服务绑定、外部地址、认证密钥、超时、容量限制和数据库位置都只从该文件读取；环境变量、JVM 属性、`SPRING_APPLICATION_JSON` 和普通命令行参数不能覆盖它们。
 
 启动命令中的 `spring.config.location` 只负责定位配置文件，不承载产品配置值。
+
+调用记录上限使用 `breakhub.interaction.max-records` 配置，必须为正整数；旧配置未填写时默认使用 `18000`。例如在 `application.yml` 的现有 `breakhub.interaction` 节点中添加：
+
+```yaml
+breakhub:
+  interaction:
+    max-records: 18000
+```
+
+修改后重启产品生效，设置页面“运行限制”可查看生效值。启动时及新调用、调用完成时会自动清理超限的最老已完成未命中记录；降低上限后，已有记录也会按此规则清理。清理从数据库移除记录，若需留存完整历史，应先导出 `.mbsession`。当命中或执行中记录已占满上限时，新的已完成未命中记录也可能立即被清理；要进一步控制受保护历史的数量，可导出后手动整理 Session。
+
+业务上报的幂等重放只覆盖尚未清理的调用；已清理 ID 的 after 上报返回 `interaction_not_tracked`，再次 before 上报会按当前调试状态处理为新调用或跳过。
 
 一个产品实例只服务配置中的一台装备。`breakhub.equipment.debugger-switch.url` 必须指向业务接入端唯一入口，例如 Demo 的 `http://127.0.0.1:18622/api/demo/debugger/enabled`；本阶段该入口不鉴权，5 秒硬超时也不是部署配置项。`breakhub.security.business-client-token` 必须与 Demo 的 `debugger.business-client-token` 显式配置为相同值，仓库中 Demo 的默认值是 `breakhub-local-business-token`。Reporting Lease ID 只保存在产品协调器内存中，不进入公开 API、Web、MCP、Agent、配置或日志。
 

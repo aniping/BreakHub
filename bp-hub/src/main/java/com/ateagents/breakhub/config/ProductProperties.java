@@ -3,10 +3,12 @@ package com.ateagents.breakhub.config;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -40,6 +42,7 @@ public record ProductProperties(
 
     public record Interaction(
             @NotNull Duration pauseTimeout,
-            @NotNull DataSize maxPayloadSize) {
+            @NotNull DataSize maxPayloadSize,
+            @DefaultValue("18000") @Min(1) int maxRecords) {
     }
 }

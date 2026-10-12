@@ -34,3 +34,4 @@ breakhub:
   interaction:
     pause-timeout: 25m
     max-payload-size: 16MB
+    max-records: 18000

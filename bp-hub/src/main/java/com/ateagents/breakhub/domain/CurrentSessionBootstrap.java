@@ -8,15 +8,21 @@ public class CurrentSessionBootstrap implements SmartInitializingSingleton {
 
     private final CurrentSessionService sessions;
     private final PauseService pauses;
+    private final InteractionRetentionService retention;
 
-    public CurrentSessionBootstrap(CurrentSessionService sessions, PauseService pauses) {
+    public CurrentSessionBootstrap(
+            CurrentSessionService sessions,
+            PauseService pauses,
+            InteractionRetentionService retention) {
         this.sessions = sessions;
         this.pauses = pauses;
+        this.retention = retention;
     }
 
     @Override
     public void afterSingletonsInstantiated() {
         sessions.initializeDefault();
         pauses.safeRelease(sessions.current().sessionId(), "product_restart");
+        retention.prune();
     }
 }

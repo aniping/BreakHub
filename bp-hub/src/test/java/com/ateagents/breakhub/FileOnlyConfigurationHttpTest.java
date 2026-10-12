@@ -45,6 +45,7 @@ class FileOnlyConfigurationHttpTest {
                   interaction:
                     pause-timeout: 25m
                     max-payload-size: 16MB
+                    max-records: 24000
                 """.formatted(directory.resolve("data").toString().replace("\\", "/")), StandardCharsets.UTF_8);
 
         String propertyName = "breakhub.equipment.display-name";
@@ -56,11 +57,13 @@ class FileOnlyConfigurationHttpTest {
                 StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME,
                 new MapPropertySource(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, Map.of(
                         "breakhub.equipment.id", "environment-equipment",
+                        "breakhub.interaction.max-records", "1",
                         "breakhub.security.gateway-token", "environment-gateway-token")));
         application.setEnvironment(environment);
         try (ConfigurableApplicationContext context = application.run(
                 "--spring.config.location=" + config.toUri(),
                 "--breakhub.equipment.id=cli-equipment",
+                "--breakhub.interaction.max-records=2",
                 "--breakhub.security.gateway-token=cli-gateway-token")) {
             int port = ((ServletWebServerApplicationContext) context).getWebServer().getPort();
             HttpClient client = HttpClient.newHttpClient();
@@ -83,6 +86,7 @@ class FileOnlyConfigurationHttpTest {
                     .build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertThat(settings.statusCode()).isEqualTo(200);
             assertThat(settings.body()).contains("\"port\":" + port);
+            assertThat(settings.body()).contains("\"max_interaction_records\":24000");
 
             HttpResponse<String> environmentToken = client.send(HttpRequest.newBuilder()
                     .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/overview"))
